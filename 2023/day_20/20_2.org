@@ -1,0 +1,174 @@
+* Imports
+#+name:imports
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (use '[clojure.string :only (split includes? trim replace ends-with? starts-with? replace-first join)])
+  (use '[clojure.string :only (split includes? trim replace ends-with? starts-with? replace-first join)])
+  (use '[clojure.math :only (sqrt pow)])
+  (use '[clojure.set :only (union rename-keys rename difference)])
+  (use '[clojure.spec.alpha :only (int-in-range?)])
+#+end_src
+
+#+RESULTS: imports
+
+
+* Input
+#+name:inputs
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (def input (split (slurp "./input.txt") #"\n"))
+  (def sample1 (split (slurp "./sample1.txt") #"\n"))
+  (def sample2 (split (slurp "./sample2.txt") #"\n"))
+#+end_src
+
+#+RESULTS: inputs
+| class clojure.lang.Compiler$CompilerException |
+| class clojure.lang.Compiler$CompilerException |
+
+
+* Solve
+** read-input
+#+name:read-input
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (defn make-module [type name dest]
+    {:type type :name name :dest dest})
+
+  (defn read-module [explanation]
+    (let [[name dest] (split explanation #" -> ")
+          dest (split dest #", ")]
+      (if (= name "broadcaster")
+        {:type \b :name "broadcaster" :dest dest :recent nil}
+        {:type (first name) :name (apply str (rest name)) :dest dest :recent nil})))
+
+  (defn make-flip-flop [module]
+    (assoc module :state 'off))
+
+  (defn make-conjunction [module modules]
+    (assoc module :input (reduce (fn [inputs {name :name}] (assoc inputs name 'low)) {} (filter #(some #{(:name module)} (:dest %)) modules))))
+
+  (defn read-config [input]
+    (let [modules (map read-module input)]
+      (reduce (fn [config module]
+                (assoc config
+                       (:name module)
+                       (cond (= (:type module) \%) (make-flip-flop module)
+                             (= (:type module) \&) (make-conjunction module modules)
+                             (= (:type module) \b) module))) {} modules)))
+#+end_src
+
+#+RESULTS: read-input
+| #'user/make-module      |
+| #'user/read-module      |
+| #'user/make-flip-flop   |
+| #'user/make-conjunction |
+| #'user/read-config      |
+
+
+** solve-1
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  <<inputs>>
+  <<read-input>>
+  (defn low? [pulse] (= pulse 'low))
+  (defn high? [pulse] (= pulse 'high))
+  (defn flip-flop [state] (if (= state 'on) 'off 'on))
+  (defn flip-flop? [module] (= (:type module) \%))
+  (defn conjunction? [module] (= (:type module) \&))
+  (defn broadcaster? [module] (= (:type module) \b))
+
+  (defn receive-pulse [receiver sender pulse config]
+    (let [receiver (config receiver)]
+      (if (conjunction? receiver)
+        (assoc-in config [(:name receiver) :recent] {:sender sender :pulse pulse})
+        (assoc-in config [(:name receiver) :recent] pulse))))
+
+  (defn process-pulse [module config]
+    (let [module (config module)]
+      (cond (flip-flop? module) (if (= (:recent module) 'low) (update-in config [(:name module) :state] flip-flop) config)
+            (conjunction? module) (let [recent (:recent (config (:name module)))]
+                                    (assoc-in config [(:name module) :input (:sender recent)] (:pulse recent)))
+            (broadcaster? module) config)))
+
+  (defn make-pulse [module config]
+    (let [module (config module)]
+      (cond (flip-flop? module) (if (= 'high (:recent module)) nil (if (= 'on (:state module)) 'high 'low))
+            (conjunction? module) (if (every? high? (map val (:input module))) 'low 'high)
+            (broadcaster? module) (:recent module))))
+
+  (defn make-schedule [sender pulse dest]
+    {:sender sender :pulse pulse :dest dest})
+
+  (defn receive-schedule [schedule config]
+    (reduce (fn [conf dest] (receive-pulse dest (:sender schedule) (:pulse schedule) conf)) config (filter config (:dest schedule))))
+
+  (defn process-schedule [schedule config]
+    (reduce (fn [conf dest] (process-pulse dest conf)) config (filter config (:dest schedule))))
+
+  (defn push-button [config]
+    (loop [config config
+           [schedule & rests] (list (make-schedule "button" 'low ["broadcaster"]))]
+      ;; (println schedule)
+      (if (nil? schedule)
+        config
+        (let [after-send (process-schedule schedule (receive-schedule schedule config))]
+          (recur after-send
+                 (concat rests (remove #(nil? (:pulse %))
+                                       (map #(make-schedule % (make-pulse % after-send) (:dest (after-send %))) (:dest schedule)))))))))
+
+  (defn solve [input]
+    (loop [config (read-config input)
+           count 1]
+      (let [after-push (push-button config)]
+        (if (every? high? (map val (:input (after-push "qq"))))
+          count
+          (recur after-push
+                 (inc count))))))
+
+  (defn push-button [config]
+    (loop [config config
+           [schedule & rests] (list (make-schedule "button" 'low ["broadcaster"]))]
+      (cond (every? high? (map val (:input (config "jc")))) {:config config :result true}
+            (nil? schedule) {:config config :result false}
+            :else (let [after-send (process-schedule schedule (receive-schedule schedule config))]
+                    (recur after-send
+                           (concat rests (remove #(nil? (:pulse %))
+                                                 (map #(make-schedule % (make-pulse % after-send) (:dest (after-send %))) (:dest schedule)))))))))
+
+  (defn solve [input]
+    (loop [config (read-config input)
+           count 1]
+      (let [after-push (push-button config)]
+        (if (:result after-push)
+          count
+          (recur (:config after-push)
+                 (inc count))))))
+#+end_src
+
+#+RESULTS:
+| #'user/input            |
+| #'user/sample1          |
+| #'user/sample2          |
+| #'user/make-module      |
+| #'user/read-module      |
+| #'user/make-flip-flop   |
+| #'user/make-conjunction |
+| #'user/read-config      |
+| #'user/low?             |
+| #'user/high?            |
+| #'user/flip-flop        |
+| #'user/flip-flop?       |
+| #'user/conjunction?     |
+| #'user/broadcaster?     |
+| #'user/receive-pulse    |
+| #'user/process-pulse    |
+| #'user/make-pulse       |
+| #'user/make-schedule    |
+| #'user/receive-schedule |
+| #'user/process-schedule |
+| #'user/push-button      |
+| #'user/solve            |
+| #'user/push-button      |
+| #'user/solve            |
+
+
+* Test
+#+begin_src clojure :noweb yes :noweb-ref yes
+#+end_src

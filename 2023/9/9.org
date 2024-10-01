@@ -1,0 +1,94 @@
+* Imports
+#+name:imports
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (use '[clojure.string :only (split includes? trim)])
+#+end_src
+
+* Input
+#+name:inputs
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  (def input (split (slurp "./input.txt") #"\n"))
+  (def sample (split (slurp "./sample.txt") #"\n"))
+#+end_src
+
+* 1
+** read-input
+#+name:read-input
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (defn read-input [input] (map #(map read-string (split % #" ")) input))
+#+end_src
+
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<inputs>>
+  <<read-input>>
+  (defn differences [l] (map - (rest l) (butlast l)))
+  (defn predict-next [sequence]
+    (loop [current sequence
+           next (differences current)
+           result (last current)]
+      (if (every? zero? next)
+        result
+        (recur next
+               (differences next)
+               (+ result (last next))))))
+
+  (predict-next [0 3 6 9 12 15])
+  (apply + (map predict-next (read-input input)))
+#+end_src
+
+#+RESULTS:
+| #'user/input        |
+| #'user/sample       |
+| #'user/read-input   |
+| #'user/differences  |
+| #'user/predict-next |
+| 18                  |
+| 1743490457          |
+
+
+* 2
+** read-input
+#+name:read-input
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (defn read-input [input] (map #(map read-string (split % #" ")) input))
+#+end_src
+
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<inputs>>
+  <<read-input>>
+  (defn differences [l] (map - (rest l) (butlast l)))
+
+  (defn predict-previous [sequence]
+    (if (every? zero? sequence)
+      0
+      (- (first sequence) (predict-previous (differences sequence)))))
+
+  (predict-previous [10 13 16 21 30 45])
+  (predict-previous [1 3 6 10 15 21])
+  (apply + (map predict-previous (read-input input)))
+#+end_src
+
+#+RESULTS:
+| #'user/input            |
+| #'user/sample           |
+| #'user/read-input       |
+| #'user/differences      |
+| #'user/predict-previous |
+| 5                       |
+| 0                       |
+| 1053                    |
+
+* Tests
+#+begin_src clojure :noweb yes :noweb-ref yes
+  sequence
+  (sequence [1 2 3])
+  (seq [1 2 3])
+  (= (sequence [1 2 3]) (seq [1 2 3]))
+#+end_src
+
+#+RESULTS:
+| #function[clojure.core/sequence] |
+| (1 2 3)                          |
+| (1 2 3)                          |
+| true                             |

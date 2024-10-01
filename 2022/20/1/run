@@ -1,0 +1,13 @@
+#! /bin/sh
+ARGS=$@
+
+make app
+
+
+if [ ! "$ARGS" ]; then
+    ./app "sample"
+fi
+
+if [ "$ARGS" ]; then
+    ./app "$ARGS"
+fi

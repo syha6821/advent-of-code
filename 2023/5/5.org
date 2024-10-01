@@ -1,0 +1,211 @@
+* Imports
+#+name:imports
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (use '[clojure.string :only (split includes? trim)])
+#+end_src
+
+* Input
+#+name:inputs
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  (def input (split (slurp "./input.txt") #"\n"))
+  (def sample (split (slurp "./sample.txt") #"\n"))
+
+  (defn make-range [start length]
+    {:min start :max (+ start (dec length)) :length length})
+
+  (defn make-range-minmax [min max]
+    {:min min :max max :length (inc (- max min))})
+
+  (defn range-included? [reference-range asked-range]
+    (and (<= (reference-range :min) (asked-range :min))
+         (>= (reference-range :max) (asked-range :max))))
+
+  (defn no-intersection? [range1 range2]
+    (or (> (range1 :min) (range2 :max))
+        (< (range1 :max) (range2 :min))))
+
+  (defn has-intersection? [range1 range2]
+    (not (no-intersection? range1 range2)))
+
+  (defn overlapped-range [ref-range target-range]
+    (cond (range-included? ref-range target-range) {:overlapped [target-range] :not-overlapped []}
+          (range-included? target-range ref-range) {:overlapped [ref-range] :not-overlapped [(make-range-minmax (target-range :min) (dec (ref-range :min))) (make-range-minmax (inc (ref-range :max)) (target-range :max))]}
+          (no-intersection? ref-range target-range) {:overlapped [] :not-overlapped [target-range]}
+          (< (ref-range :max) (target-range :max)) {:overlapped [(make-range-minmax (target-range :min) (ref-range :max))] :not-overlapped [(make-range-minmax (inc (ref-range :max)) (target-range :max))]}
+          (> (ref-range :min) (target-range :min)) {:overlapped [(make-range-minmax (ref-range :min) (target-range :max))] :not-overlapped [(make-range-minmax (target-range :min) (dec (ref-range :min)))]}))
+
+  (defn make-almanac-ranges [destination-start source-start range-length]
+    {:destination (make-range destination-start range-length)
+     :source (make-range source-start range-length)})
+
+  (defn pairing [list] (loop [result [] l list] (if (empty? l) result (recur (merge result (take 2 l)) (drop 2 l)))))
+
+  (defn make-seeds [seeds]
+    (reduce (fn [result seed] (merge result (make-range (first seed) (second seed)))) [] (pairing seeds)))
+
+  (def almanac-list (list :seeds :seed-to-soil :soil-to-fertilizer :fertilizer-to-water :water-to-light :light-to-temperature :temperature-to-humidity :humidity-to-location))
+
+  (defn make-almanac [input]
+    (let [almanac (reduce (fn [m almanac-pair] (assoc m (first almanac-pair) (second almanac-pair)))
+                          (array-map)
+                          (map (fn [m almanac] [almanac m])
+                               (map (fn [nums-str-list] (map (fn [nums-str] (map read-string (split nums-str #" "))) nums-str-list)) (filter #(not (= % (list ""))) (partition-by empty? (filter #(not (includes? % ":")) input))))
+                               almanac-list))]
+      (into (array-map) (concat [[:seeds (make-seeds (first (almanac :seeds)))]]
+                                (map (fn [ranges] [(first ranges) (map (fn [range] (make-almanac-ranges (first range) (second range) (nth range 2))) (first (rest ranges)))]) (rest almanac))))))
+
+  (defn source-to-destination [almanac] (fn [x] (+ x (- ((almanac :destination) :min) ((almanac :source) :min)))))
+
+  (defn map-range-by [f range] (make-range-minmax (f (range :min)) (f (range :max))))
+
+  (defn correspond-range [almanac range]
+    (let [overlapped (overlapped-range (almanac :source) range)]
+      {:mapped (map (fn [r] (map-range-by (source-to-destination almanac) r)) (overlapped :overlapped)) :not-mapped (overlapped :not-overlapped)}))
+
+  (defn range-to-destination [range almanacs]
+    (loop [result {:mapped [] :not-mapped [range]}
+           [almanac & rests] almanacs]
+      (if (empty? almanac)
+        result
+        (recur (let [corresponds (map (fn [not-mapped] (correspond-range almanac not-mapped)) (result :not-mapped))]
+                 {:mapped (concat (result :mapped) (mapcat :mapped corresponds))
+                  :not-mapped (filter #(> (% :length) 0) (mapcat :not-mapped corresponds))})
+               rests))))
+#+end_src
+
+#+RESULTS: inputs
+| #'user/input                 |
+| #'user/sample                |
+| #'user/make-range            |
+| #'user/make-range-minmax     |
+| #'user/range-included?       |
+| #'user/no-intersection?      |
+| #'user/has-intersection?     |
+| #'user/overlapped-range      |
+| #'user/make-almanac-ranges   |
+| #'user/pairing               |
+| #'user/make-seeds            |
+| #'user/almanac-list          |
+| #'user/make-almanac          |
+| #'user/source-to-destination |
+| #'user/map-range-by          |
+| #'user/correspond-range      |
+| #'user/range-to-destination  |
+
+* Code
+** 1
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  <<inputs>>
+  (defn make-range [destination-start source-start range-length]
+    {:destination destination-start
+     :source source-start
+     :length range-length})
+
+  (defn in-range? [start-range length num]
+    (and (<= start-range num) (>= (+ start-range (dec length)) num)))
+
+  (defn nth-in-range [start-range num] (- num start-range))
+
+  (defn correspond-num [num [head & rests]]
+    (cond (empty? head) num
+          (in-range? (head :source) (head :length) num) (+ (head :destination) (nth-in-range (head :source) num))
+          :else (correspond-num num rests)))
+
+  (in-range? 50 2 52)
+  (correspond-num 79 [(make-range 50 98 2) (make-range 52 50 48)])
+
+  (make-almanac sample)
+  (first ((make-almanac sample) :seed-to-soil))
+
+  (defn solve [input]
+    (let [almanac (make-almanac input)
+          seeds (first (almanac :seeds))]
+      (map #(last (second %))
+           (loop [almanacs (rest almanac)
+                  result (reduce (fn [m seed] (assoc m seed [seed])) (array-map) seeds)]
+             (if (empty? almanacs)
+               result
+               (recur (rest almanacs)
+                      (reduce (fn [r s] (assoc r s (merge (get r s) (correspond-num (last (get r s)) (map (fn [a] (make-range (first a) (second a) (nth a 2))) (second (first almanacs))))))) result seeds)))))))
+
+  (apply min (solve input))
+#+end_src
+
+#+RESULTS:
+| #'user/input                                                               |
+| #'user/sample                                                              |
+| #'user/make-almanac                                                        |
+| #'user/make-range                                                          |
+| #'user/in-range?                                                           |
+| #'user/nth-in-range                                                        |
+| #'user/correspond-num                                                      |
+| false                                                                      |
+| 81                                                                         |
+| {:seeds ((79 14 55 13)), :seed-to-soil ((50 98 2) (52 50 48)), :soil-to-fertilizer ((0 15 37) (37 52 2) (39 0 15)), :fertilizer-to-water ((49 53 8) (0 11 42) (42 0 7) (57 7 4)), :water-to-light ((88 18 7) (18 25 70)), :light-to-temperature ((45 77 23) (81 45 19) (68 64 13)), :temperature-to-humidity ((0 69 1) (1 0 69)), :humidity-to-location ((60 56 37) (56 93 4))} |
+| (50 98 2)                                                                  |
+| #'user/solve                                                               |
+| 214922730                                                                  |
+
+** 2
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<inputs>>
+
+  (defn solve [input]
+    (map :min (let [almanac-input (make-almanac input)]
+      (loop [[almanac & rests] (rest almanac-input)
+             result (almanac-input :seeds)]
+        (if (empty? almanac)
+          result
+          (recur rests
+                 (reduce (fn [v s] (let [mapped (range-to-destination s (second almanac))]
+                                    (concat v (mapped :mapped) (mapped :not-mapped))))
+                         []
+                         result)))))))
+
+  (apply min (solve sample))
+#+end_src
+
+#+RESULTS:
+| #'user/input                                                                                                                                             |
+| #'user/sample                                                                                                                                            |
+| #'user/make-range                                                                                                                                        |
+| #'user/make-range-minmax                                                                                                                                 |
+| #'user/range-included?                                                                                                                                   |
+| #'user/no-intersection?                                                                                                                                  |
+| #'user/has-intersection?                                                                                                                                 |
+| #'user/overlapped-range                                                                                                                                  |
+| #'user/make-almanac-ranges                                                                                                                               |
+| #'user/pairing                                                                                                                                           |
+| #'user/make-seeds                                                                                                                                        |
+| #'user/almanac-list                                                                                                                                      |
+| #'user/make-almanac                                                                                                                                      |
+| #'user/source-to-destination                                                                                                                             |
+| #'user/map-range-by                                                                                                                                      |
+| #'user/correspond-range                                                                                                                                  |
+| #'user/range-to-destination                                                                                                                              |
+| {:seeds [{:min 79, :max 92, :length 14} {:min 55, :max 67, :length 13}], :seed-to-soil ({:destination {:min 50, :max 51, :length 2}, :source {:min 98, :max 99, :length 2}} {:destination {:min 52, :max 99, :length 48}, :source {:min 50, :max 97, :length 48}}), :soil-to-fertilizer ({:destination {:min 0, :max 36, :length 37}, :source {:min 15, :max 51, :length 37}} {:destination {:min 37, :max 38, :length 2}, :source {:min 52, :max 53, :length 2}} {:destination {:min 39, :max 53, :length 15}, :source {:min 0, :max 14, :length 15}}), :fertilizer-to-water ({:destination {:min 49, :max 56, :length 8}, :source {:min 53, :max 60, :length 8}} {:destination {:min 0, :max 41, :length 42}, :source {:min 11, :max 52, :length 42}} {:destination {:min 42, :max 48, :length 7}, :source {:min 0, :max 6, :length 7}} {:destination {:min 57, :max 60, :length 4}, :source {:min 7, :max 10, :length 4}}), :water-to-light ({:destination {:min 88, :max 94, :length 7}, :source {:min 18, :max 24, :length 7}} {:destination {:min 18, :max 87, :length 70}, :source {:min 25, :max 94, :length 70}}), :light-to-temperature ({:destination {:min 45, :max 67, :length 23}, :source {:min 77, :max 99, :length 23}} {:destination {:min 81, :max 99, :length 19}, :source {:min 45, :max 63, :length 19}} {:destination {:min 68, :max 80, :length 13}, :source {:min 64, :max 76, :length 13}}), :temperature-to-humidity ({:destination {:min 0, :max 0, :length 1}, :source {:min 69, :max 69, :length 1}} {:destination {:min 1, :max 69, :length 69}, :source {:min 0, :max 68, :length 69}}), :humidity-to-location ({:destination {:min 60, :max 96, :length 37}, :source {:min 56, :max 92, :length 37}} {:destination {:min 56, :max 59, :length 4}, :source {:min 93, :max 96, :length 4}})} |
+| {:mapped ({:min 81, :max 94, :length 14}), :not-mapped []}                                                                                               |
+| {:mapped ({:min 81, :max 94, :length 14}), :not-mapped ()}                                                                                               |
+| {:mapped ({:min 20, :max 50, :length 31} {:min 320, :max 340, :length 21} {:min 1001, :max 1005, :length 5}), :not-mapped ({:min 101, :max 119, :length 19} {:min 146, :max 150, :length 5})} |
+| {:mapped ({:min 20, :max 50, :length 31}), :not-mapped ({:min 101, :max 150, :length 50})}                                                               |
+| #'user/a                                                                                                                                                 |
+| ({:min 20, :max 50, :length 31} {:min 320, :max 340, :length 21} {:min 1001, :max 1005, :length 5} {:min 101, :max 119, :length 19} {:min 146, :max 150, :length 5}) |
+| #'user/solve                                                                                                                                             |
+| 46                                                                                                                                                       |
+
+
+* Test
+#+begin_src clojure :noweb yes :noweb-ref yes
+  "good"
+  (reduce (fn [v s] (concat v [(* s s) (+ s s)]))
+          []
+          '(1 2 3 4 5))
+  (concat [] (list 1 2 3) (list 4 5 6))
+#+end_src
+
+#+RESULTS:
+| "good"                   |
+| (1 2 4 4 9 6 16 8 25 10) |
+| (1 2 3 4 5 6)            |

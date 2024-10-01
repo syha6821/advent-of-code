@@ -1,0 +1,152 @@
+* Imports
+#+name:imports
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (use '[clojure.string :only (split includes? trim replace ends-with? starts-with? replace-first join)])
+  (use '[clojure.string :only (split includes? trim replace ends-with? starts-with? replace-first join)])
+  (use '[clojure.math :only (sqrt pow)])
+  (use '[clojure.set :only (union rename-keys rename difference)])
+  (use '[clojure.spec.alpha :only (int-in-range?)])
+#+end_src
+
+#+RESULTS: imports
+
+* Input
+#+name:inputs
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (def input (split (slurp "./input.txt") #"\n"))
+  (def sample (split (slurp "./sample.txt") #"\n"))
+#+end_src
+
+* Solve
+** position
+#+name:position
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (def directions '(\U \R \D \L))
+
+  (defn cart [f l1 l2]
+    (for [x l1 y l2] (f x y)))
+
+  (defn position [row col] {:row row :col col})
+
+  (defn positions 
+    ([width height] (cart position (range 0 height) (range 0 width)))
+    ([size] (positions (:width size) (:height size))))
+
+  (def unit-positions (zipmap directions (map #(apply position %) '((-1 0) (0 1) (1 0) (0 -1)))))
+
+  (defn valid-pos? [pos size]
+    (and (int-in-range? 0 (:width size) (:col pos))
+         (int-in-range? 0 (:height size) (:row pos))))
+
+  (defn adjacent-positions [pos] (map #(merge-with + pos %) (map val unit-positions)))
+
+  (defn pos-in-map [pos size] (position (mod (:row pos) (:height size)) (mod (:col pos) (:width size))))
+  (defn map-of-pos [pos size]
+    (let [{row :row col :col} pos
+          {width :width height :height} size
+          row (if (neg? row) (- row height) row)
+          col (if (neg? col) (- col width) col)]
+     (position (quot row height) (quot col width))))
+#+end_src
+
+#+RESULTS: position
+| #'user/directions         |
+| #'user/cart               |
+| #'user/position           |
+| #'user/positions          |
+| #'user/unit-positions     |
+| #'user/valid-pos?         |
+| #'user/adjacent-positions |
+| #'user/pos-in-map         |
+| #'user/map-of-pos         |
+
+** read-input
+#+name:read-input
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<position>>
+  (defn read-size [input] {:width (count (first input)) :height (count input)})
+
+  (defn read-garden [input]
+    (let [width (count (first input))
+          height (count input)
+          pos (positions width height)]
+      (zipmap pos (map #(hash-map :pos %1 :tile %2 :footprints {}) pos (apply str input)))))
+#+end_src
+
+#+RESULTS: read-input
+| #'user/directions         |
+| #'user/cart               |
+| #'user/position           |
+| #'user/positions          |
+| #'user/unit-positions     |
+| #'user/valid-pos?         |
+| #'user/adjacent-positions |
+| #'user/pos-in-map         |
+| #'user/map-of-pos         |
+| #'user/read-size          |
+| #'user/read-garden        |
+
+** solve-1
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  <<inputs>>
+  <<read-input>>
+
+  (defn start? [tile] (= (:tile tile) \S))
+  (defn grass? [tile] (or (= (:tile tile) \.) (start? tile)))
+  (defn grass? [tile] (= (:tile tile) \.))
+  (defn rock? [tile] (= (:tile tile) \#))
+  (defn reachable-tiles-from [tile size garden] (remove #(rock? %) (map garden (adjacent-positions (:pos tile) size))))
+  (defn make-footprint [pos size] {:pos pos :mappos (map-of-pos pos size)})
+  (defn next-footprints-from [footprint size garden] (remove #(let [tile (garden (pos-in-map (:pos %) size))]
+                                                                (or (rock? tile) (contains? (:footprints tile) (:mappos %))))
+                                                             (map #(make-footprint % size) (adjacent-positions (:pos footprint)))))
+
+  (defn solve [input step]
+    (let [size (read-size input)
+          mark-step? (if (even? step) odd? even?)]
+      (loop [garden (read-garden input)
+             steps -1
+             footprints #{(make-footprint (:pos (some #(and (start? (val %)) (val %)) garden)) size)}]
+        (println (count footprints))
+        ;; (println steps (count footprints))
+        ;; (println (count footprints) footprints)
+        ;; (println steps (count footprints) footprints)
+        (if (= steps step)
+          (reduce (fn [result [_ tile]] (+ result (count (filter mark-step? (map val (:footprints tile)))))) 0 garden)
+          (let [new-garden (reduce (fn [g f] (assoc-in g [(pos-in-map (:pos f) size) :footprints (:mappos f)] steps)) garden footprints)]
+            (recur new-garden
+                   (inc steps)
+                   (into #{} (mapcat #(next-footprints-from % size new-garden) footprints))))))))
+#+end_src
+
+#+RESULTS:
+| #'user/input                |
+| #'user/sample               |
+| #'user/directions           |
+| #'user/cart                 |
+| #'user/position             |
+| #'user/positions            |
+| #'user/unit-positions       |
+| #'user/valid-pos?           |
+| #'user/adjacent-positions   |
+| #'user/pos-in-map           |
+| #'user/map-of-pos           |
+| #'user/read-size            |
+| #'user/read-garden          |
+| #'user/start?               |
+| #'user/grass?               |
+| #'user/grass?               |
+| #'user/rock?                |
+| #'user/reachable-tiles-from |
+| #'user/make-footprint       |
+| #'user/next-footprints-from |
+| #'user/solve                |
+
+
+* Test
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (distinct (remove nil?
+                    (mapcat #(reachable-tiles-from % (read-size sample) (read-garden sample))
+                            [(some #(and (start? %) %) (map val (read-garden sample)))])))
+#+end_src

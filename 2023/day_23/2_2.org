@@ -1,0 +1,159 @@
+* Imports
+#+name:imports
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (use '[clojure.string :only (split includes? trim replace ends-with? starts-with? replace-first join)])
+  (use '[clojure.string :only (split includes? trim replace ends-with? starts-with? replace-first join)])
+  (use '[clojure.math :only (sqrt pow)])
+  (use '[clojure.set :only (union rename-keys rename difference subset? superset?)])
+  (use '[clojure.spec.alpha :only (int-in-range?)])
+#+end_src
+
+#+RESULTS: imports
+
+
+* Input
+#+name:inputs
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (def input (split (slurp "./input.txt") #"\n"))
+  (def sample (split (slurp "./sample.txt") #"\n"))
+#+end_src
+
+#+RESULTS: inputs
+| class clojure.lang.Compiler$CompilerException |
+| class clojure.lang.Compiler$CompilerException |
+
+
+* Solve
+** position
+#+name:position
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (def directions '(up right down left))
+
+  (defn cart [f l1 l2]
+    (for [x l1 y l2] (f x y)))
+
+  (defn position [row col] {:row row :col col})
+
+  (defn positions 
+    ([width height] (cart position (range 0 height) (range 0 width)))
+    ([size] (positions (:width size)) (positions :height size)))
+
+  (def unit-positions (zipmap directions (map #(apply position %) '((-1 0) (0 1) (1 0) (0 -1)))))
+  (def unit-directions (zipmap (map #(apply position %) '((-1 0) (0 1) (1 0) (0 -1))) directions))
+
+  (defn adjacent-positions [pos] (map #(merge-with + pos %) (map val unit-positions)))
+#+end_src
+
+#+RESULTS: position
+| #'user/directions         |
+| #'user/cart               |
+| #'user/position           |
+| #'user/positions          |
+| #'user/unit-positions     |
+| #'user/unit-directions    |
+| #'user/adjacent-positions |
+
+** read-input
+#+name:read-input
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (defn start-pos [input]
+    (loop [top-line (first input)
+           result 0]
+      (if (= (first top-line) \.)
+        (position 0 result)
+        (recur (rest top-line)
+               (inc result)))))
+
+  (defn end-pos [input]
+    (loop [bottom-line (last input)
+           result 0]
+      (if (= (first bottom-line) \.)
+        (position (dec (count input)) result)
+        (recur (rest bottom-line)
+               (inc result)))))
+
+  (defn read-map [input]
+    (let [positions (positions (count (first input)) (count input))]
+      (into {} (filter #(not= (:tile (val %)) \#)
+                       (zipmap positions
+                               (map #(hash-map :pos %1 :tile %2) positions (apply str input)))))))
+
+  (defn map-with-end-pos [input]
+    (assoc-in (read-map input) [(end-pos input) :tile] \@))
+#+end_src
+
+#+RESULTS: read-input
+| #'user/read-map  |
+| #'user/start-pos |
+| #'user/end-pos   |
+
+** solve-1
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  <<inputs>>
+  <<position>>
+  <<read-input>>
+  (defn relative-direction [pos1 pos2] (unit-directions (merge-with - pos2 pos1)))
+  (defn next-positions [pos remain-tiles]
+    (filter #(remain-tiles %) (adjacent-positions pos)))
+  (defn end? [tile] (= \@ (:tile tile)))
+
+  (defn find-nodes [start end hiking-map]
+    (into #{start end} (map key (filter #(< 2 (count (next-positions (key %) hiking-map))) hiking-map))))
+
+  (defn adjacent-nodes [pos node-list hiking-map]
+    (letfn [(f [pos step remains]
+              (let [next-pos (next-positions pos remains)
+                    remains (dissoc remains pos)]
+                (if (contains? node-list pos)
+                  [{pos step}]
+                  (mapcat #(f % (inc step) remains) next-pos))))]
+      (let [remains (dissoc hiking-map pos)]
+        (into {} (mapcat #(f % 1 remains) (next-positions pos remains))))))
+
+  (defn node-map [input]
+    (let [start (start-pos input)
+          end (end-pos input)
+          hiking-map (read-map input)
+          node-list (find-nodes start end hiking-map)]
+      (into {} (map #(hash-map % (adjacent-nodes % node-list hiking-map)) node-list))))
+
+  (defn find-path [input]
+    (let [start (start-pos input)
+          end (end-pos input)
+          node-map (node-map input)]
+      (letfn [(f [current-node visited-node result]
+                (if (= current-node end)
+                  [result]
+                  (let [next-nodes (filter #(not (visited-node (key %))) (node-map current-node))]
+                    (mapcat #(f (key %) (conj visited-node current-node) (+ result (val %))) next-nodes))))]
+        (mapcat #(f (key %) #{start} (val %)) (node-map start)))))
+#+end_src
+
+#+RESULTS:
+| #'user/input              |
+| #'user/sample             |
+| #'user/directions         |
+| #'user/cart               |
+| #'user/position           |
+| #'user/positions          |
+| #'user/unit-positions     |
+| #'user/unit-directions    |
+| #'user/adjacent-positions |
+| #'user/start-pos          |
+| #'user/end-pos            |
+| #'user/read-map           |
+| #'user/map-with-end-pos   |
+| #'user/relative-direction |
+| #'user/next-positions     |
+| #'user/end?               |
+| #'user/find-nodes         |
+| #'user/adjacent-nodes     |
+| #'user/node-map           |
+| #'user/find-path          |
+
+
+* Test
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (calc-end-steps {:start (start-pos sample) :step 0 :remain (read-map sample)})
+#+end_src

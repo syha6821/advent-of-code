@@ -1,0 +1,373 @@
+* Imports
+#+name:imports
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (use '[clojure.string :only (split includes? trim)])
+  (use '[clojure.math :only (sqrt pow)])
+  (use '[clojure.set :only (union)])
+#+end_src
+
+#+RESULTS: imports
+
+* Input
+#+name:inputs
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  (def input (split (slurp "./input.txt") #"\n"))
+  (def sample1 (split (slurp "./sample1.txt") #"\n"))
+  (def sample2 (split (slurp "./sample2.txt") #"\n"))
+  (def sample3 (split (slurp "./sample3.txt") #"\n"))
+  (def sample4 (split (slurp "./sample4.txt") #"\n"))
+#+end_src
+
+#+RESULTS: inputs
+| #'user/input   |
+| #'user/sample1 |
+| #'user/sample2 |
+| #'user/sample3 |
+| #'user/sample4 |
+
+* 1
+** read-input
+#+name:read-input
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (defn pipe-kind [shape]
+    ({\| 'vertical
+      \- 'horizontal
+      \L 'north-east
+      \J 'north-west
+      \7 'south-west
+      \F 'south-east
+      \. 'ground
+      \S 'start} shape))
+
+  (defn map-size [input] {:row (count input) :col (count (first input))})
+  (defn make-positions [row col] (mapcat (fn [r] (map (fn [c] {:row r :col c}) (range 1 (inc col)))) (range 1 (inc row))))
+  (defn position [row col] {:row row :col col})
+  (defn read-input [input]
+    (let [size (map-size input)
+          positions (make-positions (size :row) (size :col))
+          pipes (flatten (map seq input))]
+      (reduce (fn [m info] (assoc m (apply key info) (apply val info))) {} (map (fn [pos pipe] {pos pipe}) positions pipes))))
+#+end_src
+
+#+RESULTS: read-input
+| #'user/map-size                                                                      |                                                                                                                                                          |                                                                                                                                                          |
+| #'user/make-positions                                                                |                                                                                                                                                          |                                                                                                                                                          |
+| #'user/position                                                                      |                                                                                                                                                          |                                                                                                                                                          |
+| #'user/read-input                                                                    |                                                                                                                                                          |                                                                                                                                                          |
+| #'user/sample1-map                                                                   |                                                                                                                                                          |                                                                                                                                                          |
+| #'user/sample2-map                                                                   |                                                                                                                                                          |                                                                                                                                                          |
+| #'user/sample3-map                                                                   |                                                                                                                                                          |                                                                                                                                                          |
+| #'user/sample4-map                                                                   |                                                                                                                                                          |                                                                                                                                                          |
+| #'user/input-map                                                                     |                                                                                                                                                          |                                                                                                                                                          |
+| {{:row 4, :col 2} {:kind \L}, {:row 1, :col 1} {:kind \.}, {:row 3, :col 4} {:kind \ | }, {:row 5, :col 1} {:kind \.}, {:row 5, :col 2} {:kind \.}, {:row 4, :col 4} {:kind \J}, {:row 2, :col 2} {:kind \S}, {:row 5, :col 5} {:kind \.}, {:row 1, :col 5} {:kind \.}, {:row 5, :col 3} {:kind \.}, {:row 4, :col 3} {:kind \-}, {:row 3, :col 3} {:kind \.}, {:row 3, :col 5} {:kind \.}, {:row 2, :col 4} {:kind \7}, {:row 2, :col 1} {:kind \.}, {:row 4, :col 5} {:kind \.}, {:row 2, :col 3} {:kind \-}, {:row 3, :col 2} {:kind \ | }, {:row 2, :col 5} {:kind \.}, {:row 5, :col 4} {:kind \.}, {:row 1, :col 4} {:kind \.}, {:row 1, :col 2} {:kind \.}, {:row 3, :col 1} {:kind \.}, {:row 4, :col 1} {:kind \.}, {:row 1, :col 3} {:kind \.}} |
+
+
+** solve
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<inputs>>
+  <<read-input>>
+  (read-input sample1)
+
+  (defn connected-to [direction]
+    ({'down #{\| \L \J}
+      'up #{\| \7 \F}
+      'left #{\- \L \F}
+      'right #{\- \J \7}} direction))
+
+  (defn relative-position [pos target-pos]
+    (let [sub-pos (position (- (target-pos :row) (pos :row)) (- (target-pos :col) (pos :col)))]
+      (cond (= sub-pos (position -1 0)) 'up
+            (= sub-pos (position 0 1)) 'right
+            (= sub-pos (position 1 0)) 'down
+            (= sub-pos (position 0 -1)) 'left)))
+
+  (defn can-connected? [pipe target-pipe]
+    (let [connected-direction (apply relative-position (map position-of [pipe target-pipe]))]
+      (if (= (kind-of pipe) \S)
+        (contains? (connected-to connected-direction) (kind-of target-pipe))
+        (and (contains? (connected-to connected-direction) (kind-of target-pipe))
+             (contains? ({\| '#{down up}
+                          \- '#{left right} 
+                          \L '#{up right}
+                          \J '#{up left}
+                          \7 '#{down left}
+                          \F '#{down right}} (kind-of pipe))
+                        (apply relative-position (map position-of [pipe target-pipe])))))))
+
+  (defn make-pipe [pos kind] (first {pos kind}))
+
+  (defn up-pos [pos] (position (dec (pos :row)) (pos :col)))
+  (defn down-pos [pos] (position (inc (pos :row)) (pos :col)))
+  (defn left-pos [pos] (position (pos :row) (inc (pos :col))))
+  (defn right-pos [pos] (position (pos :row) (dec (pos :col))))
+
+  (defn position-of [pipe] (key pipe))
+  (defn kind-of [pipe] (val pipe))
+
+  (defn start-position [pipes] (position-of (some #(and (= (kind-of %) \S) %) pipes)))
+
+  (defn pipe? [pipe] (contains? #{\| \- \L \J \7 \F \S} (kind-of pipe)))
+  (defn pipe-at [pos pipe-map] (find pipe-map pos))
+  (defn adjacent-positions [pos] (list (up-pos pos) (down-pos pos) (left-pos pos) (right-pos pos)))
+  (defn adjacent-pipes [pipe pipe-map] (filter #(and (not (nil? %)) (pipe? %)) (map (fn [pos] (pipe-at pos pipe-map)) (adjacent-positions (position-of pipe)))))
+  (defn distance [pos1 pos2] (sqrt (+ (pow (- (pos1 :row) (pos2 :row)) 2) (pow (- (pos1 :col) (pos2 :col)) 2))))
+  (defn adjacent? [pos1 pos2] (== 1 (distance pos1 pos2)))
+  (defn connected? [pipe target-pipe] (and (adjacent? (position-of pipe) (position-of target-pipe))
+                                           (can-connected? pipe target-pipe)))
+  (defn connected-pipes [pipe pipe-map]
+    (filter #(connected? pipe %) (adjacent-pipes pipe pipe-map)))
+
+  (defn next-pipe [prev-pipe current-pipe pipe-map]
+    (filter #(not (= prev-pipe %)) (connected-pipes current-pipe pipe-map)))
+
+  (defn guess-s [pipe-map]
+    (let [start-pos (start-position pipe-map)
+          adjacents (into (sorted-set) (map (fn [pipe] (relative-position start-pos (position-of pipe))) (connected-pipes (pipe-at start-pos pipe-map) pipe-map)))]
+      (cond (= adjacents (sorted-set 'up 'down)) \|
+            (= adjacents (sorted-set 'left 'right)) \-
+            (= adjacents (sorted-set 'up 'right)) \L
+            (= adjacents (sorted-set 'up 'left)) \J
+            (= adjacents (sorted-set 'down 'left)) \7
+            (= adjacents (sorted-set 'down 'right)) \F)))
+
+
+  (def sample1-map (read-input sample1))
+  (def sample2-map (read-input sample2))
+  (def sample3-map (read-input sample3))
+  (def sample4-map (read-input sample4))
+  (def input-map (read-input input))
+
+  (defn find-loop [input]
+    (let [start-pos (start-position input)
+          pipe-map (assoc input start-pos (guess-s input))]
+      (loop [current (pipe-at start-pos pipe-map)
+             prev current
+             next (first (next-pipe prev current pipe-map))
+             loop-seq []]
+        (println "loop : " loop-seq)
+        (if (= (position-of next) start-pos)
+          (concat loop-seq current)
+          (recur next
+                 current
+                 (first (next-pipe current next pipe-map))
+                 (concat loop-seq current))))))
+
+  (defn find-loop [input]
+    (let [start-pos (start-position input)
+          pipe-map (assoc input start-pos (guess-s input))]
+      (loop [current (pipe-at start-pos pipe-map)
+             prev current
+             next (first (next-pipe prev current pipe-map))
+             length 1]
+        (if (= (position-of next) start-pos)
+          length
+          (recur next
+                 current
+                 (first (next-pipe current next pipe-map))
+                 (inc length))))))
+#+end_src
+
+#+RESULTS:
+| #'user/input                                                  |                                                                            |                                                                            |
+| #'user/sample1                                                |                                                                            |                                                                            |
+| #'user/sample2                                                |                                                                            |                                                                            |
+| #'user/sample3                                                |                                                                            |                                                                            |
+| #'user/sample4                                                |                                                                            |                                                                            |
+| #'user/pipe-kind                                              |                                                                            |                                                                            |
+| #'user/map-size                                               |                                                                            |                                                                            |
+| #'user/make-positions                                         |                                                                            |                                                                            |
+| #'user/position                                               |                                                                            |                                                                            |
+| #'user/read-input                                             |                                                                            |                                                                            |
+| {{:row 4, :col 2} \L, {:row 1, :col 1} \., {:row 3, :col 4} \ | , {:row 5, :col 1} \., {:row 5, :col 2} \., {:row 4, :col 4} \J, {:row 2, :col 2} \S, {:row 5, :col 5} \., {:row 1, :col 5} \., {:row 5, :col 3} \., {:row 4, :col 3} \-, {:row 3, :col 3} \., {:row 3, :col 5} \., {:row 2, :col 4} \7, {:row 2, :col 1} \., {:row 4, :col 5} \., {:row 2, :col 3} \-, {:row 3, :col 2} \ | , {:row 2, :col 5} \., {:row 5, :col 4} \., {:row 1, :col 4} \., {:row 1, :col 2} \., {:row 3, :col 1} \., {:row 4, :col 1} \., {:row 1, :col 3} \.} |
+| #'user/connected-to                                           |                                                                            |                                                                            |
+| #'user/relative-position                                      |                                                                            |                                                                            |
+| #'user/can-connected?                                         |                                                                            |                                                                            |
+| #'user/make-pipe                                              |                                                                            |                                                                            |
+| #'user/up-pos                                                 |                                                                            |                                                                            |
+| #'user/down-pos                                               |                                                                            |                                                                            |
+| #'user/left-pos                                               |                                                                            |                                                                            |
+| #'user/right-pos                                              |                                                                            |                                                                            |
+| #'user/position-of                                            |                                                                            |                                                                            |
+| #'user/kind-of                                                |                                                                            |                                                                            |
+| #'user/start-position                                         |                                                                            |                                                                            |
+| #'user/pipe?                                                  |                                                                            |                                                                            |
+| #'user/pipe-at                                                |                                                                            |                                                                            |
+| #'user/adjacent-positions                                     |                                                                            |                                                                            |
+| #'user/adjacent-pipes                                         |                                                                            |                                                                            |
+| #'user/distance                                               |                                                                            |                                                                            |
+| #'user/adjacent?                                              |                                                                            |                                                                            |
+| #'user/connected?                                             |                                                                            |                                                                            |
+| #'user/connected-pipes                                        |                                                                            |                                                                            |
+| #'user/next-pipe                                              |                                                                            |                                                                            |
+| #'user/guess-s                                                |                                                                            |                                                                            |
+| #'user/sample1-map                                            |                                                                            |                                                                            |
+| #'user/sample2-map                                            |                                                                            |                                                                            |
+| #'user/sample3-map                                            |                                                                            |                                                                            |
+| #'user/sample4-map                                            |                                                                            |                                                                            |
+| #'user/input-map                                              |                                                                            |                                                                            |
+| #'user/find-loop                                              |                                                                            |                                                                            |
+| #'user/find-loop                                              |                                                                            |                                                                            |
+
+
+* 2
+** read-input
+#+name:read-input2
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (defn map-size [input] {:row (count input) :col (count (first input))})
+  (defn make-positions [row col] (mapcat (fn [r] (map (fn [c] {:row r :col c}) (range 1 (inc col)))) (range 1 (inc row))))
+  (defn position [row col] {:row row :col col})
+  (defn read-input [input]
+    (let [size (map-size input)
+          positions (make-positions (size :row) (size :col))
+          pipes (flatten (map seq input))]
+      (reduce (fn [m info] (assoc m (apply key info) (apply val info))) {} (map (fn [pos pipe] {pos {:kind pipe}}) positions pipes))))
+
+  (def sample1-map (read-input sample1))
+  (def sample2-map (read-input sample2))
+  (def sample3-map (read-input sample3))
+  (def sample4-map (read-input sample4))
+  (def input-map (read-input input))
+  sample1-map
+#+end_src
+
+#+RESULTS: read-input2
+| #'user/map-size                                                                      |                                                                                                                                                          |                                                                                                                                                          |
+| #'user/make-positions                                                                |                                                                                                                                                          |                                                                                                                                                          |
+| #'user/position                                                                      |                                                                                                                                                          |                                                                                                                                                          |
+| #'user/read-input                                                                    |                                                                                                                                                          |                                                                                                                                                          |
+| #'user/sample1-map                                                                   |                                                                                                                                                          |                                                                                                                                                          |
+| #'user/sample2-map                                                                   |                                                                                                                                                          |                                                                                                                                                          |
+| #'user/sample3-map                                                                   |                                                                                                                                                          |                                                                                                                                                          |
+| #'user/sample4-map                                                                   |                                                                                                                                                          |                                                                                                                                                          |
+| #'user/input-map                                                                     |                                                                                                                                                          |                                                                                                                                                          |
+| {{:row 4, :col 2} {:kind \L}, {:row 1, :col 1} {:kind \.}, {:row 3, :col 4} {:kind \ | }, {:row 5, :col 1} {:kind \.}, {:row 5, :col 2} {:kind \.}, {:row 4, :col 4} {:kind \J}, {:row 2, :col 2} {:kind \S}, {:row 5, :col 5} {:kind \.}, {:row 1, :col 5} {:kind \.}, {:row 5, :col 3} {:kind \.}, {:row 4, :col 3} {:kind \-}, {:row 3, :col 3} {:kind \.}, {:row 3, :col 5} {:kind \.}, {:row 2, :col 4} {:kind \7}, {:row 2, :col 1} {:kind \.}, {:row 4, :col 5} {:kind \.}, {:row 2, :col 3} {:kind \-}, {:row 3, :col 2} {:kind \ | }, {:row 2, :col 5} {:kind \.}, {:row 5, :col 4} {:kind \.}, {:row 1, :col 4} {:kind \.}, {:row 1, :col 2} {:kind \.}, {:row 3, :col 1} {:kind \.}, {:row 4, :col 1} {:kind \.}, {:row 1, :col 3} {:kind \.}} |
+
+** find-loop
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<inputs>>
+  <<read-input2>>
+  (read-input sample1)
+
+  (defn position-of [pipe] (key pipe))
+  (defn kind-of [pipe] ((val pipe) :kind))
+
+  (defn connected-to [direction]
+    ({'down #{\| \L \J}
+      'up #{\| \7 \F}
+      'left #{\- \L \F}
+      'right #{\- \J \7}} direction))
+
+  (defn relative-position [pos target-pos]
+    (let [sub-pos (position (- (target-pos :row) (pos :row)) (- (target-pos :col) (pos :col)))]
+      (cond (= sub-pos (position -1 0)) 'up
+            (= sub-pos (position 0 1)) 'right
+            (= sub-pos (position 1 0)) 'down
+            (= sub-pos (position 0 -1)) 'left)))
+
+  (defn can-connected? [pipe target-pipe]
+    (let [connected-direction (apply relative-position (map position-of [pipe target-pipe]))]
+      (if (= (kind-of pipe) \S)
+        (contains? (connected-to connected-direction) (kind-of target-pipe))
+        (and (contains? (connected-to connected-direction) (kind-of target-pipe))
+             (contains? ({\| '#{down up}
+                          \- '#{left right} 
+                          \L '#{up right}
+                          \J '#{up left}
+                          \7 '#{down left}
+                          \F '#{down right}} (kind-of pipe))
+                        (apply relative-position (map position-of [pipe target-pipe])))))))
+
+  (defn make-pipe [pos kind] (first {pos {:kind kind}}))
+
+  (defn up-pos [pos] (position (dec (pos :row)) (pos :col)))
+  (defn down-pos [pos] (position (inc (pos :row)) (pos :col)))
+  (defn left-pos [pos] (position (pos :row) (inc (pos :col))))
+  (defn right-pos [pos] (position (pos :row) (dec (pos :col))))
+
+  (defn start-position [pipes] (position-of (some #(and (= (kind-of %) \S) %) pipes)))
+
+  (defn pipe? [pipe] (contains? #{\| \- \L \J \7 \F \S} (kind-of pipe)))
+  (defn pipe-at [pos pipe-map] (find pipe-map pos))
+  (defn adjacent-positions [pos] (list (up-pos pos) (down-pos pos) (left-pos pos) (right-pos pos)))
+  (defn adjacent-pipes [pipe pipe-map] (filter #(and (not (nil? %)) (pipe? %)) (map (fn [pos] (pipe-at pos pipe-map)) (adjacent-positions (position-of pipe)))))
+  (defn distance [pos1 pos2] (sqrt (+ (pow (- (pos1 :row) (pos2 :row)) 2) (pow (- (pos1 :col) (pos2 :col)) 2))))
+  (defn adjacent? [pos1 pos2] (== 1 (distance pos1 pos2)))
+  (defn connected? [pipe target-pipe] (and (adjacent? (position-of pipe) (position-of target-pipe))
+                                           (can-connected? pipe target-pipe)))
+  (defn connected-pipes [pipe pipe-map]
+    (filter #(connected? pipe %) (adjacent-pipes pipe pipe-map)))
+
+  (defn next-pipe [prev-pipe current-pipe pipe-map]
+    (filter #(not (= prev-pipe %)) (connected-pipes current-pipe pipe-map)))
+
+  (defn guess-s [pipe-map]
+    (let [start-pos (start-position pipe-map)
+          adjacents (into (sorted-set) (map (fn [pipe] (relative-position start-pos (position-of pipe))) (connected-pipes (pipe-at start-pos pipe-map) pipe-map)))]
+      (cond (= adjacents (sorted-set 'up 'down)) \|
+            (= adjacents (sorted-set 'left 'right)) \-
+            (= adjacents (sorted-set 'up 'right)) \L
+            (= adjacents (sorted-set 'up 'left)) \J
+            (= adjacents (sorted-set 'down 'left)) \7
+            (= adjacents (sorted-set 'down 'right)) \F)))
+
+  (defn find-loop [input]
+    (let [start-pos (start-position input)
+          pipe-map (assoc input start-pos (guess-s input))]
+      (loop [current (pipe-at start-pos pipe-map)
+             prev current
+             next (first (next-pipe prev current pipe-map))
+             length 1]
+        (if (= (position-of next) start-pos)
+          length
+          (recur next
+                 current
+                 (first (next-pipe current next pipe-map))
+                 (inc length))))))
+
+#+end_src
+
+#+RESULTS:
+| #'user/input                                                  |                                                                                                                                                          |                                                                                                                                                      |
+| #'user/sample1                                                |                                                                                                                                                          |                                                                                                                                                      |
+| #'user/sample2                                                |                                                                                                                                                          |                                                                                                                                                      |
+| #'user/sample3                                                |                                                                                                                                                          |                                                                                                                                                      |
+| #'user/sample4                                                |                                                                                                                                                          |                                                                                                                                                      |
+| #'user/pipe-kind                                              |                                                                                                                                                          |                                                                                                                                                      |
+| #'user/map-size                                               |                                                                                                                                                          |                                                                                                                                                      |
+| #'user/make-positions                                         |                                                                                                                                                          |                                                                                                                                                      |
+| #'user/position                                               |                                                                                                                                                          |                                                                                                                                                      |
+| #'user/read-input                                             |                                                                                                                                                          |                                                                                                                                                      |
+| {{:row 4, :col 2} \L, {:row 1, :col 1} \., {:row 3, :col 4} \ | , {:row 5, :col 1} \., {:row 5, :col 2} \., {:row 4, :col 4} \J, {:row 2, :col 2} \S, {:row 5, :col 5} \., {:row 1, :col 5} \., {:row 5, :col 3} \., {:row 4, :col 3} \-, {:row 3, :col 3} \., {:row 3, :col 5} \., {:row 2, :col 4} \7, {:row 2, :col 1} \., {:row 4, :col 5} \., {:row 2, :col 3} \-, {:row 3, :col 2} \ | , {:row 2, :col 5} \., {:row 5, :col 4} \., {:row 1, :col 4} \., {:row 1, :col 2} \., {:row 3, :col 1} \., {:row 4, :col 1} \., {:row 1, :col 3} \.} |
+| #'user/position-of                                            |                                                                                                                                                          |                                                                                                                                                      |
+| #'user/kind-of                                                |                                                                                                                                                          |                                                                                                                                                      |
+| #'user/connected-to                                           |                                                                                                                                                          |                                                                                                                                                      |
+| #'user/relative-position                                      |                                                                                                                                                          |                                                                                                                                                      |
+| #'user/can-connected?                                         |                                                                                                                                                          |                                                                                                                                                      |
+| #'user/make-pipe                                              |                                                                                                                                                          |                                                                                                                                                      |
+| #'user/up-pos                                                 |                                                                                                                                                          |                                                                                                                                                      |
+| #'user/down-pos                                               |                                                                                                                                                          |                                                                                                                                                      |
+| #'user/left-pos                                               |                                                                                                                                                          |                                                                                                                                                      |
+| #'user/right-pos                                              |                                                                                                                                                          |                                                                                                                                                      |
+| #'user/start-position                                         |                                                                                                                                                          |                                                                                                                                                      |
+| #'user/pipe?                                                  |                                                                                                                                                          |                                                                                                                                                      |
+| #'user/pipe-at                                                |                                                                                                                                                          |                                                                                                                                                      |
+| #'user/adjacent-positions                                     |                                                                                                                                                          |                                                                                                                                                      |
+| #'user/adjacent-pipes                                         |                                                                                                                                                          |                                                                                                                                                      |
+| #'user/distance                                               |                                                                                                                                                          |                                                                                                                                                      |
+| #'user/adjacent?                                              |                                                                                                                                                          |                                                                                                                                                      |
+| #'user/connected?                                             |                                                                                                                                                          |                                                                                                                                                      |
+| #'user/connected-pipes                                        |                                                                                                                                                          |                                                                                                                                                      |
+| #'user/next-pipe                                              |                                                                                                                                                          |                                                                                                                                                      |
+| #'user/guess-s                                                |                                                                                                                                                          |                                                                                                                                                      |
+| #'user/find-loop                                              |                                                                                                                                                          |                                                                                                                                                      |
+
+
+* Tests
+#+begin_src clojure :noweb yes :noweb-ref yes
+#+end_src
+
+#+RESULTS:
+| #{1 4 3 2}  |
+| #{good bad} |
+| ([:good 3]) |

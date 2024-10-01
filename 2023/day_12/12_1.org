@@ -1,0 +1,205 @@
+* Imports
+#+name:imports
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (use '[clojure.string :only (split includes? trim replace)])
+  (use '[clojure.math :only (sqrt pow)])
+  (use '[clojure.set :only (union)])
+#+end_src
+
+#+RESULTS: imports
+
+* Input
+#+name:inputs
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (def input (split (slurp "./input.txt") #"\n"))
+  (def sample (split (slurp "./sample.txt") #"\n"))
+#+end_src
+
+#+name:samples
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (def sample1 (read-line "???.### 1,1,3"))
+  (def sample2 (read-line ".??..??...?##. 1,1,3"))
+  (def sample3 (read-line "?#?#?#?#?#?#?#? 1,3,1,6"))
+  (def sample4 (read-line "????.#...#... 4,1,1"))
+  (def sample5 (read-line "????.######..#####. 1,6,5"))
+  (def sample6 (read-line "?###???????? 3,2,1"))
+
+  (def sample7 (read-line "???.###????.###????.###????.###????.### 1,1,3,1,1,3,1,1,3,1,1,3,1,1,3"))
+
+#+end_src
+
+#+RESULTS: samples
+| #'user/sample1 |
+| #'user/sample2 |
+| #'user/sample3 |
+| #'user/sample4 |
+| #'user/sample5 |
+| #'user/sample6 |
+| #'user/sample7 |
+
+* Solve
+** read-input
+#+name:read-input
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (defn read-line [line]
+    (let [split-by-space (split line #" ")]
+      (hash-map :springs (first split-by-space) :sizes (map read-string (split (second split-by-space) #",")))))
+
+  (defn read-input [input]
+    (map read-line input))
+
+  (defn unfold [record]
+    (hash-map :springs (subs (apply str (repeat 5 (str "?" (:springs record)))) 1)
+              :sizes (apply concat (repeat 5 (:sizes record)))))
+#+end_src
+
+#+RESULTS: read-input
+| #'user/read-line  |
+| #'user/read-input |
+
+** solve
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  <<inputs>>
+  <<read-input>>
+  (defn operational? [spring] (= spring \.))
+  (defn damaged? [spring] (= spring \#))
+#+end_src
+
+#+RESULTS:
+| #'user/input        |
+| #'user/sample       |
+| #'user/read-line    |
+| #'user/read-input   |
+| #'user/operational? |
+| #'user/damaged?     |
+
+** Tests
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  <<read-input>>
+  <<inputs>>
+
+  (defn group-by-damaged [springs]
+    (let [sizes (map count (filter #(every? damaged? %) (partition-by damaged? springs)))] 
+      (if (empty? sizes)
+        '(0)
+        sizes)))
+
+  (defn unknown? [spring] (= spring \?))
+  (defn operational? [spring] (= spring \.))
+  (defn damaged? [spring] (= spring \#))
+
+  (defn spring-freqs [record]
+    (let [freq (frequencies record)]
+      (reduce (fn [fq kind] (if (nil? (fq kind)) (assoc fq kind 0) fq)) freq '(\# \? \.))))
+
+  (defn solve-first-unknown [damaged-record]
+    (loop [[first-spring & rest-spring] damaged-record
+           result ""]
+      (if (unknown? first-spring)
+        (list (str result \# (apply str rest-spring))
+              (str result \. (apply str rest-spring)))
+        (recur rest-spring
+               (str result first-spring)))))
+
+  (defn remove-first-match [damaged-record]
+    (apply str (drop-while damaged? (drop-while #(not (damaged? %)) damaged-record))))
+
+  (defn first-completed? [damaged-record]
+    (every? damaged? (first (filter #(some (fn [s] (or (damaged? s) (unknown? s))) %) (partition-by operational? damaged-record)))))
+
+  (defn first-match? [damaged-record sizes]
+    (and (first-completed? damaged-record)
+         (= (first sizes) (first (group-by-damaged damaged-record)))))
+
+  (defn rest-size [sizes]
+    (if (empty? (rest sizes))
+      '(0)
+      (rest sizes)))
+
+  (defn possible-rows [damaged-record sizes]
+    (let [freq (spring-freqs damaged-record)
+          unknown-count (freq \?)
+          damaged-count (freq \#)]
+      (if (zero? unknown-count)
+        (if (= (group-by-damaged damaged-record) sizes) [damaged-record] nil)
+        (let [next-possibles (filter #(possible-row? % sizes) (solve-first-unknown damaged-record))]
+          (mapcat #(possible-rows % sizes) next-possibles)))))
+
+  (defn possible-row? [damaged-record sizes]
+    (let [total-springs (apply + sizes)
+          freq (spring-freqs damaged-record)]
+      (cond (and (= sizes '(0)) (not (zero? (freq \#)))) false
+            (and (first-completed? damaged-record) (not (= (first sizes) (first (group-by-damaged damaged-record))))) false
+            (< (+ (freq \?) (freq \#)) total-springs) false
+            (> (freq \#) total-springs) false
+            (= (freq \?) (- total-springs (freq \#))) (= sizes (group-by-damaged (replace damaged-record "?" "#")))
+            :else true)))
+
+  (defn possible-rows [damaged-record sizes]
+    (let [freq (spring-freqs damaged-record)
+          unknown-count (freq \?)
+          damaged-count (freq \#)]
+      (if (zero? unknown-count)
+        (if (= (group-by-damaged damaged-record) sizes) [damaged-record] nil)
+        (let [next-possibles (filter #(possible-row? % sizes) (solve-first-unknown damaged-record))]
+          (mapcat #(if (first-match? % sizes) (possible-rows (remove-first-match damaged-record) (rest-size sizes)) (possible-rows % sizes)) next-possibles)))))
+
+  (defn possible-rows [damaged-record sizes]
+    (let [freq (spring-freqs damaged-record)
+          unknown-count (freq \?)
+          damaged-count (freq \#)]
+      (cond (and (= sizes '(0)) (not (zero? damaged-count))) nil 
+            (and (= sizes '(0)) (zero? damaged-count)) [(replace damaged-record "?" ".")]
+            (and (empty? damaged-record) (not (= sizes '(0)))) nil
+            (and (zero? unknown-count) (= sizes (group-by-damaged damaged-record))) [damaged-record]
+            (and (zero? unknown-count) (not (= sizes (group-by-damaged damaged-record)))) nil
+            :else (let [next-possibles (filter #(possible-row? % sizes) (solve-first-unknown damaged-record))]
+                    (mapcat #(if (first-match? % sizes)
+                               (possible-rows (remove-first-match damaged-record) (rest-size sizes))
+                               (possible-rows % sizes)) next-possibles)))))
+
+  (defn solve-raw [input]
+    (map #(count (possible-rows (:springs %) (:sizes %))) (read-input input)))
+
+  (defn solve [input]
+    (apply + (map #(count (possible-rows (:springs %) (:sizes %))) (read-input input))))
+
+  (defn solve2 [input]
+    (map #(count (possible-rows (:springs %) (:sizes %))) (map unfold (read-input input))))
+#+end_src
+
+#+RESULTS:
+| #'user/read-line           |
+| #'user/read-input          |
+| #'user/unfold              |
+| #'user/input               |
+| #'user/sample              |
+| #'user/group-by-damaged    |
+| #'user/unknown?            |
+| #'user/operational?        |
+| #'user/damaged?            |
+| #'user/spring-freqs        |
+| #'user/solve-first-unknown |
+| #'user/remove-first-match  |
+| #'user/first-completed?    |
+| #'user/first-match?        |
+| #'user/rest-size           |
+| #'user/possible-rows       |
+| #'user/possible-row?       |
+| #'user/possible-rows       |
+| #'user/possible-rows       |
+| #'user/solve-raw           |
+| #'user/solve               |
+| #'user/solve2              |
+
+* Tests
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (subs (apply str (repeat 5 (str "?" "???.###"))) 1)
+  (apply concat (repeat 5 '(1 1 3)))
+#+end_src
+
+#+RESULTS:
+| "???.###????.###????.###????.###????.###" |
+| (1 1 3 1 1 3 1 1 3 1 1 3 1 1 3)           |

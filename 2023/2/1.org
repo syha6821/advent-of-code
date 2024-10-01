@@ -1,0 +1,136 @@
+* Imports
+#+name:imports
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (use '[clojure.string :only (split includes? trim)])
+#+end_src
+
+* Input
+#+name:inputs
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (def input (split (slurp "./input.txt") #"\n"))
+  (def sample (split (slurp "./sample.txt") #"\n"))
+#+end_src
+
+#+RESULTS: inputs
+| class clojure.lang.Compiler$CompilerException |
+| class clojure.lang.Compiler$CompilerException |
+
+* Codes
+#+name:readline
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (defn str->color [str]
+    (cond (= str "blue") 'blue
+          (= str "red") 'red
+          (= str "green") 'green))
+
+  (defn strs->cube-map [strs]
+    (loop [result {}
+           rests strs]
+      (if (empty? rests)
+        result
+        (let [split-by-space (split (first rests) #" ")
+              num (read-string (first split-by-space))
+              color (str->color (last split-by-space))]
+          (recur (assoc result color num) (rest rests))))))
+
+  (defn readline [line]
+    (let [split-by-colon (split line #": ")
+          id (read-string (last (split (first split-by-colon) #" ")))
+          sets-of-cubes (split (last split-by-colon) #"; ")]
+      {:id id
+       :sets-of-cubes (map #(strs->cube-map %) (map #(split % #", ") sets-of-cubes))}))
+#+end_src
+
+*puzzle-1*
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  <<readline>>
+  <<inputs>>
+  (def max-red 12)
+  (def max-green 13)
+  (def max-blue 14)
+
+  (defn possible-set? [cubes]
+    (let [reds (cubes 'red)
+          greens (cubes 'green)
+          blues (cubes 'blue)]
+      (and (or (nil? reds) (<= (cubes 'red) max-red))
+           (or (nil? greens) (<= (cubes 'green) max-green))
+           (or (nil? blues) (<= (cubes 'blue) max-blue)))))
+
+  (defn possible-sets? [cube-sets]
+    (cond (empty? cube-sets) true
+          (false? (possible-set? (first cube-sets))) false
+          :else (possible-sets? (rest cube-sets))))
+
+  (defn readinput [input] (map #(readline %) input))
+  (defn solve [input]
+    (reduce + (map #(% :id) (filter #(possible-sets? (% :sets-of-cubes)) (readinput input)))))
+
+
+  (solve sample)
+  (solve input)
+#+end_src
+
+*puzzle-2*
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  <<readline>>
+  <<inputs>>
+  (defn possible-set? [cubes]
+    (let [reds (cubes 'red)
+          greens (cubes 'green)
+          blues (cubes 'blue)]
+      (and (or (nil? reds) (<= (cubes 'red) max-red))
+           (or (nil? greens) (<= (cubes 'green) max-green))
+           (or (nil? blues) (<= (cubes 'blue) max-blue)))))
+
+  (defn possible-sets? [cube-sets]
+    (cond (empty? cube-sets) true
+          (false? (possible-set? (first cube-sets))) false
+          :else (possible-sets? (rest cube-sets))))
+
+  (defn find-max-color [cube-sets]
+    (loop [result {'red 0 'green 0 'blue 0}
+           head (first cube-sets)
+           rests (rest cube-sets)]
+      (if (empty? head)
+        result
+        (recur (assoc result
+                      'red (max (result 'red)
+                                (if (nil? (head 'red)) 0 (head 'red)))
+                      'green (max (result 'green)
+                                  (if (nil? (head 'green)) 0 (head 'green)))
+                      'blue (max (result 'blue)
+                                 (if (nil? (head 'blue)) 0 (head 'blue))))
+               (first rests)
+               (rest rests)))))
+  (defn gather-color-vals [color-vals]
+    (reduce * (map #(second %) (seq color-vals))))
+
+  (defn solve [input]
+    (reduce + (map #(gather-color-vals %) (map #(find-max-color %) (map #(% :sets-of-cubes) (readinput input))))))
+  (solve input)
+#+end_src
+
+#+RESULTS:
+| #'user/str->color        |
+| #'user/strs->cube-map    |
+| #'user/readline          |
+| #'user/input             |
+| #'user/sample            |
+| #'user/possible-set?     |
+| #'user/possible-sets?    |
+| #'user/find-max-color    |
+| #'user/gather-color-vals |
+| #'user/solve             |
+| 70950                    |
+
+* Test
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  (reduce + (map #(second %) (seq {:green 4 :blue 5 :red 7})))
+#+end_src
+
+#+RESULTS:
+: 16

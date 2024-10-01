@@ -1,0 +1,347 @@
+* Imports
+#+name:imports
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (use '[clojure.string :only (split includes? trim replace ends-with? starts-with? replace-first join)])
+  (use '[clojure.string :only (split includes? trim replace ends-with? starts-with? replace-first join)])
+  (use '[clojure.math :only (sqrt pow)])
+  (use '[clojure.set :only (union rename-keys rename difference)])
+  (use '[clojure.spec.alpha :only (int-in-range?)])
+#+end_src
+
+#+RESULTS: imports
+
+* Input
+#+name:inputs
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (def input (split (slurp "./input.txt") #"\n"))
+  (def input2 (split (slurp "./input2.txt") #"\n"))
+  (def sample (split (slurp "./sample.txt") #"\n"))
+  (def sample2 (split (slurp "./sample2.txt") #"\n"))
+  (def sample3 (split (slurp "./sample3.txt") #"\n"))
+  (def sample4 (split (slurp "./sample4.txt") #"\n"))
+  (def sample5 (split (slurp "./sample5.txt") #"\n"))
+#+end_src
+
+#+RESULTS: inputs
+| #'user/input   |
+| #'user/input2  |
+| #'user/sample  |
+| #'user/sample2 |
+| #'user/sample3 |
+| #'user/sample4 |
+| #'user/sample5 |
+
+* Solve
+** position
+#+name:position
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (def directions '(\U \R \D \L))
+
+  (defn cart [f l1 l2]
+    (for [x l1 y l2] (f x y)))
+
+  (defn position [row col] {:row row :col col})
+
+  (defn positions 
+    ([width height] (cart position (range 0 height) (range 0 width)))
+    ([size] (positions (:width size)) (positions :height size)))
+
+  (def unit-positions (zipmap directions (map #(apply position %) '((-1 0) (0 1) (1 0) (0 -1)))))
+
+  (defn valid-pos? [pos size]
+    (and (int-in-range? 0 (:width size) (:col pos))
+         (int-in-range? 0 (:height size) (:row pos))))
+
+  (defn adjacent-positions [pos size] (filter #(valid-pos? % size) (map #(merge-with + pos %) (map val unit-positions))))
+#+end_src
+
+#+RESULTS: position
+| #'user/directions                             |
+| class clojure.lang.Compiler$CompilerException |
+| class clojure.lang.Compiler$CompilerException |
+| class clojure.lang.Compiler$CompilerException |
+| class clojure.lang.Compiler$CompilerException |
+| class clojure.lang.Compiler$CompilerException |
+| class clojure.lang.Compiler$CompilerException |
+
+** read-input
+#+name:read-input
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<position>>
+  (defn read-size [input] {:width (count (first input)) :height (count input)})
+
+  (defn read-garden [input]
+    (let [width (count (first input))
+          height (count input)
+          pos (positions width height)]
+      (zipmap pos (map #(hash-map :pos %1 :tile %2 :distance ##Inf) pos (apply str input)))))
+
+  (defn garden-size [garden]
+    {:width (inc (:col (key (apply max-key #(:col (key %)) garden))))
+     :height (inc (:row (key (apply max-key #(:row (key %)) garden))))})
+#+end_src
+
+#+RESULTS: read-input
+| #'user/directions                             |
+| class clojure.lang.Compiler$CompilerException |
+| class clojure.lang.Compiler$CompilerException |
+| class clojure.lang.Compiler$CompilerException |
+| class clojure.lang.Compiler$CompilerException |
+| class clojure.lang.Compiler$CompilerException |
+| class clojure.lang.Compiler$CompilerException |
+| class clojure.lang.Compiler$CompilerException |
+| class clojure.lang.Compiler$CompilerException |
+| class clojure.lang.Compiler$CompilerException |
+
+** solve-2
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  <<inputs>>
+  <<read-input>>
+
+  (defn start? [tile] (= (:tile tile) \S))
+  (defn grass? [tile] (or (= (:tile tile) \.) (start? tile)))
+  (defn grass? [tile] (= (:tile tile) \.))
+  (defn rock? [tile] (= (:tile tile) \#))
+  (defn next-steps-from [step size garden] (map #(hash-map :pos % :distance (inc (:distance step)))
+                                                (remove #(let [tile (garden %)]
+                                                           (or (not tile) (rock? tile) (<= (:distance tile) (inc (:distance step)))))
+                                                        (adjacent-positions (:pos step) size))))
+
+  (defn make-step [pos distance] {:pos pos :distance distance})
+
+  (defn start-position [garden]
+    (:pos (some #(and (start? %) %) (map val garden))))
+
+  (defn solve-garden [garden steps]
+    (let [size (garden-size garden)]
+      (loop [garden garden
+             steps steps]
+        ;; (println (count steps))
+        ;; (println steps)
+        (if (empty? steps)
+          (into {} (remove #(infinite? (:distance (val %))) garden))
+          (let [new-garden (reduce (fn [g s] (if (< (:distance s) (:distance (g (:pos s)))) (assoc-in g [(:pos s) :distance] (:distance s)) g)) garden steps)]
+            (recur new-garden
+                   (reduce (fn [s n] (if (some #(and (= (:pos n) (:pos %)) (>= (:distance n) (:distance %))) s) s (conj s n))) #{} (mapcat #(next-steps-from % size new-garden) steps))))))))
+
+  (defn step-pattern [steps]
+    (let [lowest (:distance (apply min-key :distance steps))]
+      (map #(update-in % [:distance] - lowest) steps)))
+
+  (defn steps-from-source [source size]
+    (let [positions (map :pos source)
+          change-row-or-col (if (apply = (map :col positions)) :col :row)
+          zero-or-max (if (every? zero? (map #(change-row-or-col %) positions)) (dec (:width size)) 0)]
+      (map #(-> %
+                (assoc-in [:pos change-row-or-col] zero-or-max)
+                (update-in [:distance] inc)) source)))
+
+  (defn get-border-at [garden size direction]
+    (let [horizontal (contains? '#{right left} direction)]
+      (filter #(= (if (contains? '#{left up} direction) 0 (dec (:width size))) ((if horizontal :col :row) (:pos %))) (map val garden))))
+
+  (defn center-garden [garden]
+    (solve-garden garden (list (make-step (start-position garden) 0))))
+
+  ;; (defn center-garden [garden]
+  ;;   (solve-garden garden (hash-set (make-step (start-position garden) 0))))
+
+  (defn find-pattern-from [garden direction parity]
+    (let [size (garden-size garden)]
+      (loop [steps (steps-from-source (get-border-at (center-garden garden) size direction) size)
+             patterns {}
+             order 0]
+        (let [pattern (step-pattern steps)
+              current-garden (solve-garden garden steps)
+              current-steps (remove #(not (parity (:distance %))) (map val current-garden))
+              whole-steps (map val current-garden)
+              even-steps (filter #(even? (:distance %)) whole-steps)
+              odd-steps (filter #(odd? (:distance %)) whole-steps)
+              found-pattern (patterns pattern)
+              max-step (:distance (apply max-key :distance whole-steps))
+              min-step (:distance (apply min-key :distance whole-steps))]
+          ;; (println current-garden)
+          ;; (println max-step)
+          ;; (println)
+          (if found-pattern
+            {:direction direction
+             :start min-step
+             :length (- order (:order found-pattern))
+             :diff (- max-step (:max found-pattern))
+             :before-repeat (map val patterns)
+             :pattern (remove #(> (:order found-pattern) (:order %)) (map val patterns))}
+            (recur (steps-from-source (get-border-at current-garden size direction) size)
+                   (assoc patterns pattern {:min min-step :max max-step :whole whole-steps :steps current-steps :order order :count (count current-steps) :even (count even-steps) :odd (count odd-steps)})
+                   (inc order)))))))
+
+  (defn calc-steps-in-cross [garden total-step parity]
+    (let [patterns (map #(find-pattern-from garden % parity) '(up right down left))
+          result (map (fn [pattern] ;;(println) (println (dissoc pattern :before-repeat))
+                        (if (< total-step (:start pattern))
+                          (+ (apply + (map :count (filter #(> total-step (:max %)) (:before-repeat pattern))))
+                             (count (filter #(>= total-step (:distance %))
+                                            (some #(and (int-in-range? (:min %) (inc (:max %)) total-step) (:steps %))
+                                                  (:before-repeat pattern)))))
+                          (+ (reduce + (map :count (:before-repeat pattern)))
+                             (let [pattern-count (quot (- total-step (:start pattern)) (:diff pattern))
+                                   pattern-steps-count (reduce + (map :count (:pattern pattern)))
+                                   eventh-pattern-steps-count (reduce + (map :even (:pattern pattern)))
+                                   oddth-pattern-steps-count (reduce + (map :odd (:pattern pattern)))
+                                   last-diff (* (:diff pattern) (inc pattern-count))]
+                               ;; (println "direction" (:direction pattern))
+                               ;; (println "diff" (:diff pattern))
+                               ;; (println "pattern count" pattern-count)
+                               ;; (println "before count" (reduce + (map :count (:before-repeat pattern))))
+                               ;; (println "last count" (+ (if (even? (:diff pattern))
+                               ;;                            (* pattern-count pattern-steps-count)
+                               ;;                            (+ (* (quot pattern-count 2) eventh-pattern-steps-count)
+                               ;;                               (* (- pattern-count (quot pattern-count 2)) oddth-pattern-steps-count))) 
+                               ;;                          (apply + (map #(count (filter (fn [s] (and (parity (+ last-diff (:distance s)))
+                               ;;                                                                     (>= total-step (+ last-diff (:distance s))))) (:whole %)))
+                               ;;                                        (:pattern pattern)))))
+                               (+ (if (even? (:diff pattern))
+                                    (* pattern-count pattern-steps-count)
+                                    (+ (* (quot pattern-count 2) eventh-pattern-steps-count)
+                                       (* (- pattern-count (quot pattern-count 2)) oddth-pattern-steps-count))) 
+                                  (apply + (map #(count (filter (fn [s] (and (parity (+ last-diff (:distance s)))
+                                                                             (>= total-step (+ last-diff (:distance s))))) (:whole %)))
+                                                (:pattern pattern))))))))
+                      patterns)]
+      ;; (println result)
+      (apply + result)))
+
+  (defn steps-in-diagonal-from-corner [garden size corner total-step parity]
+    (let [max-row (dec (:width size))
+          start-step (make-step (cond (= (position 0 0) (:pos corner)) (position max-row max-row)
+                                      (= (position 0 max-row) (:pos corner)) (position max-row 0)
+                                      (= (position max-row 0) (:pos corner)) (position 0 max-row)
+                                      (= (position max-row max-row) (:pos corner)) (position 0 0))
+                                (+ (:distance corner) 2))
+          first-garden (solve-garden garden #{start-step})
+          diff (:width size)
+          max-step (:distance (apply max-key :distance (map val first-garden)))
+          even-steps-count (count (filter even? (map #(:distance (val %)) first-garden)))
+          odd-steps-count (count (filter odd? (map #(:distance (val %)) first-garden)))
+          garden-count-before-last (quot (- total-step (:distance start-step)) diff)
+          ;; garden-count-before-last (quot (- total-step max-step) diff)
+          garden-count-in-eventh (let [n (quot garden-count-before-last 2)] (* n (+ n 1)))
+          garden-count-in-oddth (let [n (- garden-count-before-last (quot garden-count-before-last 2))] (* n n))
+          oddth-step-count (if (= parity even?) even-steps-count odd-steps-count)
+          eventh-step-count (if (= parity even?) odd-steps-count even-steps-count)
+          steps-before-last (+ (* garden-count-in-oddth oddth-step-count) (* garden-count-in-eventh eventh-step-count))
+          last-diff (* diff garden-count-before-last)
+          last-garden-steps-count (* (inc garden-count-before-last)
+                                     (count (filter #(and (parity (+ last-diff (:distance %))) (>= total-step (+ last-diff (:distance %)))) (map val first-garden))))]
+      ;; (println "last-diff" last-diff)
+      ;; (println "start-step" first-garden)
+      ;; (println "oddth" (* garden-count-in-oddth oddth-step-count))
+      ;; (println "eventh" (* garden-count-in-eventh eventh-step-count))
+      ;; (println "garden-count-before-last" garden-count-before-last)
+      ;; (println "steps-before-last" steps-before-last)
+      ;; (println "last-garden-steps-count" last-garden-steps-count)
+      ;; (println)
+      (+ steps-before-last last-garden-steps-count)))
+
+  (defn steps-in-diagonal-from-corner [garden size corner total-step parity]
+    (let [max-row (dec (:width size))
+          start-step (make-step (cond (= (position 0 0) (:pos corner)) (position max-row max-row)
+                                      (= (position 0 max-row) (:pos corner)) (position max-row 0)
+                                      (= (position max-row 0) (:pos corner)) (position 0 max-row)
+                                      (= (position max-row max-row) (:pos corner)) (position 0 0))
+                                (+ (:distance corner) 2))
+          first-garden (solve-garden garden #{start-step})
+          diff (:width size)
+          max-step (:distance (apply max-key :distance (map val first-garden)))
+          even-steps-count (count (filter even? (map #(:distance (val %)) first-garden)))
+          odd-steps-count (count (filter odd? (map #(:distance (val %)) first-garden)))
+          garden-count-before-last (quot (- total-step (:distance start-step)) diff)
+          ;; garden-count-before-last (quot (- total-step max-step) diff)
+          garden-count-in-eventh (let [n (quot garden-count-before-last 2)] (* n (+ n 1)))
+          garden-count-in-oddth (let [n (- garden-count-before-last (quot garden-count-before-last 2))] (* n n))
+          oddth-step-count (if (= parity even?) even-steps-count odd-steps-count)
+          eventh-step-count (if (= parity even?) odd-steps-count even-steps-count)
+          steps-before-last (+ (* garden-count-in-oddth oddth-step-count) (* garden-count-in-eventh eventh-step-count))
+          last-diff (* diff garden-count-before-last)
+          last-garden-steps-count (- (* (inc garden-count-before-last)
+                                        (count (filter #(and (parity (+ last-diff (:distance %))) (>= total-step (+ last-diff (:distance %)))) (map val first-garden))))
+                                     (* garden-count-before-last
+                                        (count (filter #(and (parity (+ (- last-diff diff) (:distance %)))
+                                                             (> (+ (- last-diff diff) (:distance %)) total-step)) (map val first-garden)))))]
+      ;; (println "last-diff" last-diff)
+      ;; (println "start-step" first-garden)
+      ;; (println "oddth" (* garden-count-in-oddth oddth-step-count))
+      ;; (println "eventh" (* garden-count-in-eventh eventh-step-count))
+      ;; (println "garden-count-before-last" garden-count-before-last)
+      ;; (println "steps-before-last" steps-before-last)
+      ;; (println "last-garden-steps-count" last-garden-steps-count)
+      ;; (println)
+      (+ steps-before-last last-garden-steps-count)))
+
+  (defn calc-steps-in-diagonal [garden size total-step parity]
+    (let [center (center-garden garden)
+          corners [(center (position 0 0))
+                   (center (position 0 (dec (:width size))))
+                   (center (position (dec (:width size)) 0))
+                   (center (position (dec (:width size)) (dec (:width size))))]]
+      (apply + (map #(steps-in-diagonal-from-corner garden size % total-step parity) corners))))
+
+  (defn solve [input steps]
+    (let [garden (read-garden input)
+          parity (if (even? steps) even? odd?)
+          size (read-size input)
+          center-count (count (filter #(and (parity (:distance (val %))) (>= steps (:distance (val %)))) (center-garden garden)))
+          cross-count (calc-steps-in-cross garden steps parity)
+          diagonal-count (calc-steps-in-diagonal garden size steps parity)]
+      (println)
+      (println "center : " center-count)
+      (println "cross : " cross-count)
+      (println "diagonal : " diagonal-count)
+      (+ center-count
+         cross-count
+         diagonal-count)))
+#+end_src
+
+#+RESULTS:
+| #'user/input                         |
+| #'user/sample                        |
+| #'user/sample2                       |
+| #'user/sample3                       |
+| #'user/sample4                       |
+| #'user/sample5                       |
+| #'user/directions                    |
+| #'user/cart                          |
+| #'user/position                      |
+| #'user/positions                     |
+| #'user/unit-positions                |
+| #'user/valid-pos?                    |
+| #'user/adjacent-positions            |
+| #'user/read-size                     |
+| #'user/read-garden                   |
+| #'user/garden-size                   |
+| #'user/start?                        |
+| #'user/grass?                        |
+| #'user/grass?                        |
+| #'user/rock?                         |
+| #'user/next-steps-from               |
+| #'user/make-step                     |
+| #'user/start-position                |
+| #'user/solve-garden                  |
+| #'user/step-pattern                  |
+| #'user/steps-from-source             |
+| #'user/get-border-at                 |
+| #'user/center-garden                 |
+| #'user/find-pattern-from             |
+| #'user/calc-steps-in-cross           |
+| #'user/steps-in-diagonal-from-corner |
+| #'user/steps-in-diagonal-from-corner |
+| #'user/calc-steps-in-diagonal        |
+| #'user/solve                         |
+
+* Test
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (sort-by #((juxt :row :col) (key %)) (solve-garden (read-garden sample5) (steps-from-source (get-border-at (center-garden (read-garden sample5)) (read-size sample5) 'up) (read-size sample5))))
+#+end_src
+
+#+RESULTS:
+: {{:row 6, :col 6} {:tile \., :pos {:row 6, :col 6}, :distance 19}, {:row 4, :col 2} {:tile \., :pos {:row 4, :col 2}, :distance 13}, {:row 1, :col 1} {:tile \., :pos {:row 1, :col 1}, :distance 13}, {:row 2, :col 9} {:tile \#, :pos {:row 2, :col 9}, :distance ##Inf}, {:row 3, :col 10} {:tile \., :pos {:row 3, :col 10}, :distance 26}, {:row 10, :col 3} {:tile \., :pos {:row 10, :col 3}, :distance 18}, {:row 7, :col 6} {:tile \., :pos {:row 7, :col 6}, :distance 20}, {:row 0, :col 8} {:tile \., :pos {:row 0, :col 8}, :distance 21}, {:row 0, :col 3} {:tile \., :pos {:row 0, :col 3}, :distance 16}, {:row 3, :col 4} {:tile \#, :pos {:row 3, :col 4}, :distance ##Inf}, {:row 8, :col 1} {:tile \#, :pos {:row 8, :col 1}, :distance ##Inf}, {:row 5, :col 1} {:tile \#, :pos {:row 5, :col 1}, :distance ##Inf}, {:row 2, :col 6} {:tile \#, :pos {:row 2, :col 6}, :distance ##Inf}, {:row 2, :col 10} {:tile \., :pos {:row 2, :col 10}, :distance 25}, {:row 10, :col 5} {:tile \., :pos {:row 10, :col 5}, :distance 20}, {:row 2, :col 8} {:tile \., :pos {:row 2, :col 8}, :distance 23}, {:row 5, :col 2} {:tile \#, :pos {:row 5, :col 2}, :distance ##Inf}, {:row 4, :col 10} {:tile \., :pos {:row 4, :col 10}, :distance 27}, {:row 0, :col 2} {:tile \., :pos {:row 0, :col 2}, :distance 15}, {:row 6, :col 3} {:tile \., :pos {:row 6, :col 3}, :distance 14}, {:row 4, :col 4} {:tile \#, :pos {:row 4, :col 4}, :distance ##Inf}, {:row 2, :col 2} {:tile \#, :pos {:row 2, :col 2}, :distance ##Inf}, {:row 5, :col 8} {:tile \#, :pos {:row 5, :col 8}, :distance ##Inf}, {:row 8, :col 7} {:tile \#, :pos {:row 8, :col 7}, :distance ##Inf}, {:row 4, :col 7} {:tile \., :pos {:row 4, :col 7}, :distance 22}, {:row 10, :col 1} {:tile \., :pos {:row 10, :col 1}, :distance 16}, {:row 0, :col 9} {:tile \., :pos {:row 0, :col 9}, :distance 22}, {:row 5, :col 5} {:tile \S, :pos {:row 5, :col 5}, :distance 19}, {:row 8, :col 10} {:tile \., :pos {:row 8, :col 10}, :distance 27}, {:row 4, :col 8} {:tile \., :pos {:row 4, :col 8}, :distance 25}, {:row 1, :col 5} {:tile \#, :pos {:row 1, :col 5}, :distance ##Inf}, {:row 9, :col 8} {:tile \#, :pos {:row 9, :col 8}, :distance ##Inf}, {:row 7, :col 4} {:tile \., :pos {:row 7, :col 4}, :distance 16}, {:row 3, :col 0} {:tile \., :pos {:row 3, :col 0}, :distance 12}, {:row 7, :col 2} {:tile \., :pos {:row 7, :col 2}, :distance 14}, {:row 3, :col 7} {:tile \., :pos {:row 3, :col 7}, :distance 21}, {:row 10, :col 4} {:tile \., :pos {:row 10, :col 4}, :distance 19}, {:row 9, :col 10} {:tile \., :pos {:row 9, :col 10}, :distance 26}, {:row 5, :col 10} {:tile \., :pos {:row 5, :col 10}, :distance 26}, {:row 4, :col 6} {:tile \#, :pos {:row 4, :col 6}, :distance ##Inf}, {:row 1, :col 8} {:tile \., :pos {:row 1, :col 8}, :distance 22}, {:row 5, :col 7} {:tile \#, :pos {:row 5, :col 7}, :distance ##Inf}, {:row 10, :col 9} {:tile \., :pos {:row 10, :col 9}, :distance 24}, {:row 5, :col 3} {:tile \., :pos {:row 5, :col 3}, :distance 15}, {:row 10, :col 0} {:tile \., :pos {:row 10, :col 0}, :distance 15}, {:row 9, :col 7} {:tile \., :pos {:row 9, :col 7}, :distance 23}, {:row 6, :col 5} {:tile \#, :pos {:row 6, :col 5}, :distance ##Inf}, {:row 6, :col 7} {:tile \., :pos {:row 6, :col 7}, :distance 22}, {:row 0, :col 10} {:tile \., :pos {:row 0, :col 10}, :distance 23}, {:row 5, :col 9} {:tile \#, :pos {:row 5, :col 9}, :distance ##Inf}, {:row 4, :col 3} {:tile \., :pos {:row 4, :col 3}, :distance 14}, {:row 6, :col 0} {:tile \., :pos {:row 6, :col 0}, :distance 11}, {:row 6, :col 8} {:tile \., :pos {:row 6, :col 8}, :distance 21}, {:row 9, :col 3} {:tile \., :pos {:row 9, :col 3}, :distance 17}, {:row 3, :col 3} {:tile \., :pos {:row 3, :col 3}, :distance 15}, {:row 9, :col 6} {:tile \#, :pos {:row 9, :col 6}, :distance ##Inf}, {:row 3, :col 8} {:tile \#, :pos {:row 3, :col 8}, :distance ##Inf}, {:row 8, :col 5} {:tile \., :pos {:row 8, :col 5}, :distance 20}, {:row 10, :col 6} {:tile \., :pos {:row 10, :col 6}, :distance 21}, {:row 7, :col 3} {:tile \., :pos {:row 7, :col 3}, :distance 15}, {:row 8, :col 6} {:tile \#, :pos {:row 8, :col 6}, :distance ##Inf}, {:row 0, :col 1} {:tile \., :pos {:row 0, :col 1}, :distance 14}, {:row 3, :col 5} {:tile \., :pos {:row 3, :col 5}, :distance 21}, {:row 0, :col 6} {:tile \., :pos {:row 0, :col 6}, :distance 19}, {:row 2, :col 4} {:tile \., :pos {:row 2, :col 4}, :distance 17}, {:row 5, :col 6} {:tile \#, :pos {:row 5, :col 6}, :distance ##Inf}, {:row 0, :col 0} {:tile \., :pos {:row 0, :col 0}, :distance 13}, {:row 2, :col 1} {:tile \#, :pos {:row 2, :col 1}, :distance ##Inf}, {:row 4, :col 0} {:tile \., :pos {:row 4, :col 0}, :distance 11}, {:row 5, :col 0} {:tile \., :pos {:row 5, :col 0}, :distance 12}, {:row 10, :col 10} {:tile \., :pos {:row 10, :col 10}, :distance 25}, {:row 6, :col 4} {:tile \., :pos {:row 6, :col 4}, :distance 19}, {:row 9, :col 2} {:tile \#, :pos {:row 9, :col 2}, :distance ##Inf}, {:row 3, :col 9} {:tile \., :pos {:row 3, :col 9}, :distance 27}, {:row 0, :col 4} {:tile \., :pos {:row 0, :col 4}, :distance 17}, {:row 0, :col 5} {:tile \., :pos {:row 0, :col 5}, :distance 18}, {:row 2, :col 7} {:tile \., :pos {:row 2, :col 7}, :distance 24}, {:row 9, :col 5} {:tile \#, :pos {:row 9, :col 5}, :distance ##Inf}, {:row 4, :col 5} {:tile \., :pos {:row 4, :col 5}, :distance 20}, {:row 6, :col 2} {:tile \#, :pos {:row 6, :col 2}, :distance ##Inf}, {:row 1, :col 6} {:tile \#, :pos {:row 1, :col 6}, :distance ##Inf}, {:row 2, :col 3} {:tile \#, :pos {:row 2, :col 3}, :distance ##Inf}, {:row 1, :col 0} {:tile \., :pos {:row 1, :col 0}, :distance 12}, {:row 7, :col 5} {:tile \., :pos {:row 7, :col 5}, :distance 19}, {:row 3, :col 2} {:tile \#, :pos {:row 3, :col 2}, :distance ##Inf}, {:row 6, :col 1} {:tile \#, :pos {:row 6, :col 1}, :distance ##Inf}, {:row 7, :col 7} {:tile \#, :pos {:row 7, :col 7}, :distance ##Inf}, {:row 4, :col 9} {:tile \., :pos {:row 4, :col 9}, :distance 24}, {:row 7, :col 0} {:tile \., :pos {:row 7, :col 0}, :distance 14}, {:row 9, :col 0} {:tile \., :pos {:row 9, :col 0}, :distance 14}, {:row 7, :col 9} {:tile \., :pos {:row 7, :col 9}, :distance 27}, {:row 8, :col 3} {:tile \., :pos {:row 8, :col 3}, :distance 18}, {:row 2, :col 5} {:tile \#, :pos {:row 2, :col 5}, :distance ##Inf}, {:row 8, :col 4} {:tile \#, :pos {:row 8, :col 4}, :distance ##Inf}, {:row 7, :col 8} {:tile \#, :pos {:row 7, :col 8}, :distance ##Inf}, {:row 9, :col 4} {:tile \., :pos {:row 9, :col 4}, :distance 18}, {:row 6, :col 9} {:tile \#, :pos {:row 6, :col 9}, :distance ##Inf}, {:row 7, :col 10} {:tile \., :pos {:row 7, :col 10}, :distance 26}, {:row 5, :col 4} {:tile \., :pos {:row 5, :col 4}, :distance 18}, {:row 10, :col 8} {:tile \., :pos {:row 10, :col 8}, :distance 23}, {:row 2, :col 0} {:tile \., :pos {:row 2, :col 0}, :distance 11}, {:row 1, :col 9} {:tile \#, :pos {:row 1, :col 9}, :distance ##Inf}, {:row 6, :col 10} {:tile \., :pos {:row 6, :col 10}, :distance 27}, {:row 1, :col 4} {:tile \., :pos {:row 1, :col 4}, :distance 16}, {:row 8, :col 0} {:tile \., :pos {:row 8, :col 0}, :distance 13}, {:row 8, :col 8} {:tile \#, :pos {:row 8, :col 8}, :distance ##Inf}, {:row 1, :col 7} {:tile \#, :pos {:row 1, :col 7}, :distance ##Inf}, {:row 1, :col 2} {:tile \., :pos {:row 1, :col 2}, :distance 14}, {:row 7, :col 1} {:tile \., :pos {:row 7, :col 1}, :distance 15}, {:row 10, :col 7} {:tile \., :pos {:row 10, :col 7}, :distance 22}, {:row 3, :col 1} {:tile \., :pos {:row 3, :col 1}, :distance 11}, {:row 9, :col 9} {:tile \#, :pos {:row 9, :col 9}, :distance ##Inf}, {:row 9, :col 1} {:tile \#, :pos {:row 9, :col 1}, :distance ##Inf}, {:row 3, :col 6} {:tile \., :pos {:row 3, :col 6}, :distance 20}, {:row 10, :col 2} {:tile \., :pos {:row 10, :col 2}, :distance 17}, {:row 0, :col 7} {:tile \., :pos {:row 0, :col 7}, :distance 20}, {:row 8, :col 9} {:tile \#, :pos {:row 8, :col 9}, :distance ##Inf}, {:row 4, :col 1} {:tile \., :pos {:row 4, :col 1}, :distance 12}, {:row 8, :col 2} {:tile \#, :pos {:row 8, :col 2}, :distance ##Inf}, {:row 1, :col 3} {:tile \., :pos {:row 1, :col 3}, :distance 15}, {:row 1, :col 10} {:tile \., :pos {:row 1, :col 10}, :distance 24}}

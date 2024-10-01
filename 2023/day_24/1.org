@@ -1,0 +1,122 @@
+* Imports
+#+name:imports
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (use '[clojure.string :only (split includes? trim replace ends-with? starts-with? replace-first join)])
+  (use '[clojure.string :only (split includes? trim replace ends-with? starts-with? replace-first join)])
+  (use '[clojure.math :only (sqrt pow)])
+  (use '[clojure.set :only (union rename-keys rename difference subset? superset?)])
+  (use '[clojure.spec.alpha :only (int-in-range?)])
+#+end_src
+
+#+RESULTS: imports
+
+
+* Input
+#+name:inputs
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (def input (split (slurp "./input.txt") #"\n"))
+  (def sample (split (slurp "./sample.txt") #"\n"))
+#+end_src
+
+#+RESULTS: inputs
+| class clojure.lang.Compiler$CompilerException |
+| class clojure.lang.Compiler$CompilerException |
+
+
+* Solve
+** read-input
+#+name:read-input
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (defn line->xyz [line]
+    (zipmap '(:x :y :z) (map read-string (split line #","))))
+
+  (defn read-hailstone [line]
+    (let [[position velocity] (split line #"@")]
+      {:pos (line->xyz position)
+       :vel (line->xyz velocity)}))
+
+  (defn read-input [input]
+    (into {} (map #(let [hailstone (read-hailstone %)] {(:pos hailstone) hailstone}) input)))
+#+end_src
+
+#+RESULTS: read-input
+| #'user/line->xyz      |
+| #'user/read-hailstone |
+| #'user/read-input     |
+
+** solve-1
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  <<inputs>>
+  <<read-input>>
+
+  (defn slope [hailstone] (/ (:y (:vel hailstone)) (:x (:vel hailstone))))
+
+  (defn parallel? [h1 h2]
+    (= (slope h1) (slope h2)))
+
+  (defn y-intercept [hailstone]
+    (- (:y (:pos hailstone))
+       (* (slope hailstone) (:x (:pos hailstone)))))
+
+  (defn crossing [h1 h2]
+    (let [x (/ (- (y-intercept h2) (y-intercept h1)) (- (slope h1) (slope h2)))
+          y (+ (* x (slope h1)) (y-intercept h1))]
+      {:x (+ x 0.0) :y (+ y 0.0)}))
+
+  (defn in-test-area? [position]
+    (let [min 7
+          max 27]
+      (and (and (>= (:x position) min) (<= (:x position) max))
+           (and (>= (:y position) min) (<= (:y position) max)))))
+
+  ;; (defn in-test-area? [position]
+  ;;   (let [min 200000000000000
+  ;;         max 400000000000000]
+  ;;     (and (and (>= (:x position) min) (<= (:x position) max))
+  ;;          (and (>= (:y position) min) (<= (:y position) max)))))
+
+  (defn already-passed? [cross hailstone]
+    (let [x-passed? (if (neg? (:x (:vel hailstone))) > <)
+          y-passed? (if (neg? (:y (:vel hailstone))) > <)]
+      (or (x-passed? (:x cross) (:x (:pos hailstone)))
+          (y-passed? (:y cross) (:y (:pos hailstone))))))
+
+  (defn cross? [h1 h2]
+    (and (not (parallel? h1 h2))
+         (let [cross (crossing h1 h2)]
+           (and (in-test-area? cross)
+                (and (not (already-passed? cross h1))
+                     (not (already-passed? cross h2)))))))
+
+  (defn solve-1 [input]
+    (let [hailstones (read-input input)]
+      (loop [hailstone (val (first hailstones))
+             hailstones (rest hailstones)
+             result 0]
+        (if (empty? hailstones)
+          result
+          (recur (val (first hailstones))
+                 (rest hailstones)
+                 (+ result (count (filter #(cross? hailstone %) (map val hailstones)))))))))
+#+end_src
+
+#+RESULTS:
+| #'user/input           |
+| #'user/sample          |
+| #'user/line->xyz       |
+| #'user/read-hailstone  |
+| #'user/read-input      |
+| #'user/slope           |
+| #'user/parallel?       |
+| #'user/y-intercept     |
+| #'user/crossing        |
+| #'user/in-test-area?   |
+| #'user/already-passed? |
+| #'user/cross?          |
+| #'user/solve-1         |
+
+
+* Test
+#+begin_src clojure :noweb yes :noweb-ref yes
+#+end_src

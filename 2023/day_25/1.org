@@ -1,0 +1,142 @@
+* Imports
+#+name:imports
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (use '[clojure.string :only (split includes? trim replace ends-with? starts-with? replace-first join)])
+  (use '[clojure.string :only (split includes? trim replace ends-with? starts-with? replace-first join)])
+  (use '[clojure.math :only (sqrt pow)])
+  (use '[clojure.set :only (intersection union rename-keys rename difference subset? superset?)])
+  (use '[clojure.spec.alpha :only (int-in-range?)])
+#+end_src
+
+#+RESULTS: imports
+
+
+* Input
+#+name:inputs
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (def input (split (slurp "./input.txt") #"\n"))
+  (def sample (split (slurp "./sample.txt") #"\n"))
+#+end_src
+
+#+RESULTS: inputs
+| class clojure.lang.Compiler$CompilerException |
+| class clojure.lang.Compiler$CompilerException |
+
+
+* Solve
+** read-input
+#+name:read-input
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (defn read-line [line]
+    (let [s (split line #":")]
+      {(first s) (into #{} (remove empty? (split (second s) #" ")))}))
+
+  (defn read-input [input]
+    (let [input (into {} (map read-line input))]
+      (reduce (fn [result [k vals]]
+                (reduce (fn [r v] (update-in r [v] (fnil conj #{}) k)) result vals)) input input)))
+#+end_src
+
+#+RESULTS: read-input
+| #'user/read-line  |
+| #'user/read-input |
+
+** solve-1
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  <<inputs>>
+  <<read-input>>
+
+  (defn make-wire [m1 m2]
+    #{m1 m2})
+
+  (defn remove-machine [machine machines]
+    (let [removed-from (machines machine)]
+      (dissoc (reduce (fn [result m] (update-in result [m] disj machine)) machines removed-from) machine)))
+
+  (defn locate-machines [current-machines height hang]
+    (reduce (fn [result m] (update-in result [height :machines] (fnil conj #{}) m)) hang current-machines))
+
+  (defn locate-wires [current-machines machines height hang]
+    (reduce (fn [result machine]
+              (reduce (fn [r m] (if (contains? (:machines (hang height)) m)
+                                  (update-in r [height :wires] (fnil conj #{}) (make-wire machine m))
+                                  (update-in r [(inc height) :wires] (fnil conj #{}) (make-wire machine m))))
+                      result (machines machine)))
+            hang current-machines))
+
+  (defn hang-down [machines top]
+    (loop [machines machines
+           current-machines [top]
+           height 0
+           result {}]
+      (println height current-machines)
+      (if (empty? machines)
+        result
+        (recur (reduce (fn [result m] (remove-machine m result)) machines current-machines)
+               (into #{} (mapcat #(machines %) current-machines))
+               (+ height 2)
+               (locate-wires current-machines machines height (locate-machines current-machines height result))))))
+
+  (defn hang-down [machines top]
+    (loop [machines machines
+           current-machines #{top}
+           height 0
+           result {}]
+      (if (empty? machines)
+        result
+        (recur (reduce (fn [result m] (remove-machine m result)) machines current-machines)
+               (apply disj (into #{} (mapcat #(machines %) current-machines)) current-machines)
+               (+ height 2)
+               (locate-wires current-machines machines height (locate-machines current-machines height result))))))
+
+  (defn connected-wires [machine wires]
+    (reduce (fn [result wire] (if (contains? wire machine) (conj result wire) result)) #{} wires))
+
+  (defn connected-machines [machine wires]
+    (let [w (connected-wires machine wires)]
+      (if (empty? w)
+        [machine]
+        (concat [machine] (mapcat #(connected-machines (first (disj % machine)) (disj wires %)) w)))))
+
+  (defn group-by-connected [machines wires]
+    (loop [machines machines
+           result #{}]
+      (if (empty? machines)
+        result
+        (let [group (into #{} (connected-machines (first machines) wires))]
+          (recur (apply disj machines group)
+                 (conj result group))))))
+
+  (defn group-hang [hang]
+    (reduce (fn [result [key {machines :machines wires :wires}]]
+              (if (even? key)
+                (assoc result key {:machines machines :wires wires :groups (group-by-connected machines wires)})
+                (assoc result key {:machines machines :wires wires}))) {} hang))
+
+  (defn solve [input]
+    (let [input (read-input input)]
+      (map #(group-hang (hang-down input (key %))) input)))
+#+end_src
+
+#+RESULTS:
+| #'user/input              |
+| #'user/sample             |
+| #'user/read-line          |
+| #'user/read-input         |
+| #'user/make-wire          |
+| #'user/remove-machine     |
+| #'user/locate-machines    |
+| #'user/locate-wires       |
+| #'user/hang-down          |
+| #'user/hang-down          |
+| #'user/connected-wires    |
+| #'user/connected-machines |
+| #'user/group-by-connected |
+| #'user/group-hang         |
+| #'user/solve              |
+
+
+* Test
+#+begin_src clojure :noweb yes :noweb-ref yes
+#+end_src

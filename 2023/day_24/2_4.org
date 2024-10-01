@@ -1,0 +1,267 @@
+* Imports
+#+name:imports
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (use '[clojure.string :only (split includes? trim replace ends-with? starts-with? replace-first join)])
+  (use '[clojure.string :only (split includes? trim replace ends-with? starts-with? replace-first join)])
+  (use '[clojure.math :only (sqrt pow)])
+  (use '[clojure.set :only (union intersection rename-keys rename difference subset? superset?)])
+  (use '[clojure.spec.alpha :only (int-in-range?)])
+#+end_src
+
+#+RESULTS: imports
+
+
+* Input
+#+name:inputs
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (def input (split (slurp "./input.txt") #"\n"))
+  (def sample (split (slurp "./sample.txt") #"\n"))
+  (def sample2 (split (slurp "./sample2.txt") #"\n"))
+  (def sample-vel {:x -3 :y 1 :z 2})
+  (def input-vel {:x -164 :y -127 :z 223})
+  (def sample-finest
+    {:finest
+   ['({:pos {:x 19, :y 13, :z 30},
+      :og {:x 19, :y 13, :z 30},
+      :vel {:x -2, :y 1, :z -2}}
+     {:pos {:x 20, :y 25, :z 34},
+      :og {:x 20, :y 25, :z 34},
+      :vel {:x -2, :y -2, :z -4}})
+    #{1 -1}],
+   :coord :x})
+  (def input-finest
+    {:finest
+   ['({:pos
+      {:x 206554425526542, :y 225228566865989, :z 366127275139298},
+      :og {:x 206554425526542, :y 225228566865989, :z 366127275139298},
+      :vel {:x -7, :y 17, :z 13}}
+     {:pos
+      {:x 291070468901155, :y 303205932797500, :z 274215786828898},
+      :og {:x 291070468901155, :y 303205932797500, :z 274215786828898},
+      :vel {:x -7, :y 16, :z -33}})
+    #{1
+      157
+      -1
+      -84516043374613
+      -538318747609
+      538318747609
+      -157
+      84516043374613}],
+   :coord :x})
+#+end_src
+
+#+RESULTS: inputs
+| #'user/input         |
+| #'user/sample        |
+| #'user/sample2       |
+| #'user/sample-vel    |
+| #'user/input-vel     |
+| #'user/sample-finest |
+| #'user/input-finest  |
+
+
+* Solve
+** read-input
+#+name:read-input
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (defn line->xyz [line]
+    (zipmap '(:x :y :z) (map read-string (split line #","))))
+
+  (defn read-hailstone [line]
+    (let [[position velocity] (split line #"@")
+          pos (line->xyz position)
+          vel (line->xyz velocity)]
+      {:pos pos
+       :og pos
+       :vel vel}))
+
+  (defn read-input [input]
+    (reduce (fn [result hailstone] (assoc result (:pos hailstone) hailstone)) {} (map read-hailstone input)))
+#+end_src
+
+#+RESULTS: read-input
+| #'user/line->xyz      |
+| #'user/read-hailstone |
+| #'user/read-input     |
+
+** solve-1
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  <<inputs>>
+  <<read-input>>
+
+  (defn after-one-second [hails]
+    (reduce (fn [result [og-pos hail]]
+              (let [new-pos (merge-with + (:pos hail) (:vel hail))]
+                (assoc result og-pos (assoc hail :pos new-pos)))) {} hails))
+
+  (defn after-n-second [hails n]
+    (reduce (fn [result [og-pos hail]]
+              (let [new-pos (merge-with + (:pos hail) (merge-with * (:vel hail) {:x n :y n :z n}))]
+                (assoc result og-pos (assoc hail :pos new-pos)))) {} hails))
+
+  (defn after-n-second-hail [hail n]
+    (assoc hail :pos (merge-with + (:og hail) (merge-with * (:vel hail) {:x n :y n :z n}))))
+
+  (defn calc-velocity [prev-pos current-pos time]
+    (reduce #(assoc %1 (key %2) (/ (val %2) time)) {} (merge-with - current-pos prev-pos)))
+
+  (defn make-stone [h1 h2 time]
+    (let [start (:pos h1)
+          vel (calc-velocity (:pos h1) (:pos h2) time)]
+      {:first h1 :second h2 :pos (:pos h2) :vel vel}))
+
+  (defn paralell? [stone hail]
+    (some #(and (not= ((:pos stone) %) ((:pos hail) %)) (= ((:vel stone) %) ((:vel hail) %))) '(:x :y :z)))
+
+  (defn cross-time [stone hail]
+    (let [coords (remove #(and (= ((:pos stone) %) ((:pos hail) %)) (= ((:vel stone) %) ((:vel hail) %))) '(:x :y :z))]
+      (zipmap coords (map #(/ (- ((:pos hail) %) ((:pos stone) %)) (- ((:vel stone) %) ((:vel hail) %))) coords))))
+
+  (defn cross-point [stone hail]
+    (let [times (cross-time stone hail)
+          time (val (first times))]
+      (and (apply = (map val times))
+           (merge-with + (:pos hail) (merge-with * (:vel hail) {:x time :y time :z time})))))
+
+  (defn cross? [stone hail]
+    (and (not (paralell? stone hail))
+         (cross-point stone hail)))
+
+  (defn group-by-same-velocity [hails coord]
+    (into {} (remove #(= 1 (count (val %))) (group-by #(coord (:vel %)) (map val hails)))))
+
+  (defn group-by-same-velocity [hails coord]
+    (map val (remove #(= 1 (count (val %))) (group-by #(coord (:vel %)) (map val hails)))))
+
+  (defn combinations [l]
+    (loop [[first & rest] l
+           result []]
+      (if (empty? rest)
+        result
+        (recur rest
+               (concat result (map #(list first %) rest))))))
+
+  (defn divisors [num]
+    (if (= num 1) '(1 -1)
+        (let [front (filterv #(zero? (rem num %)) (range 1 (sqrt num)))
+              latter (mapv #(/ num %) front)
+              divs (concat front latter)]
+          (concat divs (map - divs)))))
+
+  (defn possible-velocities [h1 h2 coord]
+    (into #{} (map #(- (coord (:vel h1)) %) (divisors (abs (- (coord (:pos h1)) (coord (:pos h2))))))))
+
+  (defn possible-velocities-k [hails]
+    (let [x-group (group-by-same-velocity hails :x)
+          y-group (group-by-same-velocity hails :y)
+          z-group (group-by-same-velocity hails :z)
+          x-vels (apply intersection (map #(possible-velocities (first %) (second %) :x) (mapcat combinations x-group)))
+          y-vels (apply intersection (map #(possible-velocities (first %) (second %) :y) (mapcat combinations y-group)))
+          z-vels (apply intersection (map #(possible-velocities (first %) (second %) :z) (mapcat combinations z-group)))]
+      (list x-vels y-vels z-vels)))
+
+  (defn time-differences [h1 h2 coord]
+    (into #{} (divisors (abs (- (coord (:pos h1)) (coord (:pos h2)))))))
+
+  (defn get-finest-time-distance [hails]
+    (let [x-group (group-by-same-velocity hails :x)
+          y-group (group-by-same-velocity hails :y)
+          z-group (group-by-same-velocity hails :z)
+          x-times (reduce #(assoc %1 %2 (time-differences (first %2) (second %2) :x)) {} (mapcat combinations x-group))
+          y-times (reduce #(assoc %1 %2 (time-differences (first %2) (second %2) :y)) {} (mapcat combinations y-group))
+          z-times (reduce #(assoc %1 %2 (time-differences (first %2) (second %2) :z)) {} (mapcat combinations z-group))
+          x-finest (apply min-key #(count (val %)) x-times)
+          y-finest (apply min-key #(count (val %)) y-times)
+          z-finest (apply min-key #(count (val %)) z-times)
+          finest (min-key #(count (val %)) x-finest y-finest z-finest)]
+      {:finest finest :coord (cond (= finest x-finest) :x (= finest y-finest) :y (= finest z-finest) :z)}))
+
+  (defn lowest-z [hails]
+    (val (apply min-key #(:z (:pos (val %))) hails)))
+
+  (defn find-timing [finest vels]
+    (let [coord (:coord finest)
+          h1 (first (first (:finest finest)))
+          h2 (second (first (:finest finest)))
+          timing (first (filter #(= (coord vels) (/ (- (+ (coord (:pos h2)) (* (coord (:vel h2)) %)) (coord (:pos h1))) %)) (second (:finest finest))))
+          former (if (neg? timing) h2 h1)
+          latter (if (neg? timing) h1 h2)
+          time-diff (abs timing)
+          test-coord ({:x :y :y :z :z :x} coord)
+          time (/ (+ (* (test-coord vels) time-diff) (- (test-coord (:pos latter))) (test-coord (:pos former)) (- (* (test-coord (:vel latter)) time-diff)))
+                  (- (test-coord (:vel latter)) (test-coord (:vel former))))]
+      {:pos (:pos former)
+       :hail-vel (:vel former)
+       :time time
+       :vel vels}))
+
+  (defn solve-sample []
+    (let [result (find-timing sample-finest sample-vel)
+          time (:time result)
+          middle-hail (merge-with + (:pos result) (merge-with * (:hail-vel result) {:x time :y time :z time}))
+          start (merge-with - middle-hail (merge-with * (:vel result) {:x time :y time :z time}))
+          answer (apply + (map val start))]
+      answer))
+
+  (defn solve-input []
+    (let [result (find-timing input-finest input-vel)
+          time (:time result)
+          middle-hail (merge-with + (:pos result) (merge-with * (:hail-vel result) {:x time :y time :z time}))
+          start (merge-with - middle-hail (merge-with * (:vel result) {:x time :y time :z time}))
+          answer (apply + (map val start))]
+      answer))
+#+end_src
+
+#+RESULTS:
+| #'user/input                    |
+| #'user/sample                   |
+| #'user/sample2                  |
+| #'user/sample-vel               |
+| #'user/input-vel                |
+| #'user/sample-finest            |
+| #'user/input-finest             |
+| #'user/line->xyz                |
+| #'user/read-hailstone           |
+| #'user/read-input               |
+| #'user/after-one-second         |
+| #'user/after-n-second           |
+| #'user/after-n-second-hail      |
+| #'user/calc-velocity            |
+| #'user/make-stone               |
+| #'user/paralell?                |
+| #'user/cross-time               |
+| #'user/cross-point              |
+| #'user/cross?                   |
+| #'user/group-by-same-velocity   |
+| #'user/group-by-same-velocity   |
+| #'user/combinations             |
+| #'user/divisors                 |
+| #'user/possible-velocities      |
+| #'user/possible-velocities-k    |
+| #'user/time-differences         |
+| #'user/get-finest-time-distance |
+| #'user/lowest-z                 |
+| #'user/find-timing              |
+| #'user/solve-sample             |
+| #'user/solve-input              |
+
+
+* Test
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (defn divisors [num]
+    (if (= num 1) '(1 -1)
+        (let [front (filterv #(zero? (rem num %)) (range 1 (sqrt num)))
+              latter (mapv #(/ num %) front)
+              divs (concat front latter)]
+          (concat divs (map - divs)))))
+
+  (possible-velocities (first (first (combinations (val (first (group-by-same-velocity (read-input sample) :x))))))
+                       (second (first (combinations (val (first (group-by-same-velocity (read-input sample) :x))))))
+                       :x)
+#+end_src
+
+#+RESULTS:
+: #'user/divisors
+
+(#{-164} #{-127} #{223})

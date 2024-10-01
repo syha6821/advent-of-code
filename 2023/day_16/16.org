@@ -1,0 +1,231 @@
+* Imports
+#+name:imports
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (use '[clojure.string :only (split includes? trim replace ends-with? starts-with? replace-first join)])
+  (use '[clojure.math :only (sqrt pow)])
+  (use '[clojure.set :only (union)])
+#+end_src
+
+#+RESULTS: imports
+
+* Input
+#+name:inputs
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (def input (split (slurp "./input.txt") #"\n"))
+  (def sample (split (slurp "./sample.txt") #"\n"))
+  (def sample1 (split (slurp "./sample1.txt") #"\n"))
+#+end_src
+
+#+RESULTS: inputs
+| #'user/input   |
+| #'user/sample  |
+| #'user/sample1 |
+
+* Solve
+** read-input
+#+name:read-input
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (defn inclusive-range [start end] (range start (inc end)))
+  (defn cart [f l1 l2]
+    (for [x l1 y l2] (f x y)))
+  (defn position [row col] {:row row :col col})
+  (defn positions [width height]
+    (cart position (inclusive-range 1 width) (inclusive-range 1 height)))
+  (defn read-input [input]
+    (zipmap (positions (count input) (count (first input))) (apply str input)))
+#+end_src
+
+** solve-1
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  <<inputs>>
+  <<read-input>>
+
+  (defn empty-tile? [tile] (= tile \.))
+  (defn mirror? [tile] (not (empty-tile? tile)))
+  (def clockwise '(up right down left))
+  (def unit-positions (zipmap clockwise (map #(apply position %) '((-1 0) (0 1) (1 0) (0 -1)))))
+  (defn pos-at [direction pos] (merge-with + pos (unit-positions direction)))
+
+  (defn make-light [direction position] {:pos position :direction direction})
+  (defn light-move [direction light] (make-light direction (pos-at direction (:pos light))))
+  (def reflect-positions {\\ {'up '(left) 'right '(down) 'down '(right) 'left '(up)}
+                          \/ {'up '(right) 'right '(up) 'down '(left) 'left '(down)}
+                          \| {'up '(up) 'down '(down) 'left '(up down) 'right '(up down)}
+                          \- {'up '(left right) 'down '(left right) 'left '(left) 'right '(right)}})
+
+  (defn reflect [light mirror]
+    (map #(light-move % light) ((reflect-positions mirror) (:direction light))))
+
+  (defn next-light [light tiles]
+    (let [tile (tiles (:pos light))]
+      (if (mirror? tile) (reflect light tile) (list (make-light (:direction light) (pos-at (:direction light) (:pos light)))))))
+
+  (defn map-size [m]
+    {:width (count (first m))
+     :height (count m)})
+
+  (defn valid-pos? [pos size]
+    (and (and (pos? (:row pos)) (<= (:row pos) (:width size)))
+         (and (pos? (:col pos)) (<= (:col pos) (:height size)))))
+
+  (defn solve-1 [input]
+    (let [tiles (read-input input)
+          sizes (map-size input)]
+      (loop [lights (list (make-light 'right (position 1 1)))
+             energized #{}]
+        (let [current-energy (union energized (into #{} lights))]
+          (if (= energized current-energy)
+            (distinct (map :pos current-energy))
+            (recur (filter #(and (valid-pos? (:pos %) sizes) (nil? (current-energy %))) (mapcat #(next-light % tiles) lights))
+                   current-energy))))))
+
+  (defn start-lights [tiles size]
+    (let [whole-pos (map key tiles)
+          top-row (map #(make-light 'down %) (filter #(= (:row %) 1) whole-pos))
+          bottom-row (map #(make-light 'up %) (filter #(= (:row %) (:height size)) whole-pos))
+          leftmost-col (map #(make-light 'right %) (filter #(= (:col %) 1) whole-pos))
+          rightmost-col (map #(make-light 'left %) (filter #(= (:col %) (:width size)) whole-pos))]
+      (concat top-row bottom-row leftmost-col rightmost-col)))
+
+  (defn solve-with-start-light [tiles sizes start-light]
+    (loop [lights (list start-light)
+           energized #{}]
+      (let [current-energy (union energized (into #{} lights))]
+        (if (= energized current-energy)
+          (distinct (map :pos current-energy))
+          (recur (filter #(and (valid-pos? (:pos %) sizes) (nil? (current-energy %))) (mapcat #(next-light % tiles) lights))
+                 current-energy)))))
+
+  (defn solve-2 [input]
+    (let [tiles (read-input input)
+          size (map-size input)]
+      (apply max (map #(count (solve-with-start-light tiles size %)) (start-lights tiles size)))))
+#+end_src
+
+#+RESULTS:
+| #'user/input             |
+| #'user/sample            |
+| #'user/sample1           |
+| #'user/inclusive-range   |
+| #'user/cart              |
+| #'user/position          |
+| #'user/positions         |
+| #'user/read-input        |
+| #'user/empty-tile?       |
+| #'user/mirror?           |
+| #'user/clockwise         |
+| #'user/unit-positions    |
+| #'user/pos-at            |
+| #'user/make-light        |
+| #'user/light-move        |
+| #'user/reflect-positions |
+| #'user/reflect           |
+| #'user/next-light        |
+| #'user/map-size          |
+| #'user/valid-pos?        |
+| #'user/solve-1           |
+
+
+
+** solve-2
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  <<inputs>>
+  <<read-input>>
+
+  (defn empty-tile? [tile] (= tile \.))
+  (defn mirror? [tile] (not (empty-tile? tile)))
+  (def clockwise '(up right down left))
+  (def unit-positions (zipmap clockwise (map #(apply position %) '((-1 0) (0 1) (1 0) (0 -1)))))
+  (defn pos-at [direction pos] (merge-with + pos (unit-positions direction)))
+
+  (defn make-light [direction position] {:pos position :direction direction})
+  (defn light-move [direction light] (make-light direction (pos-at direction (:pos light))))
+  (def reflect-positions {\\ {'up '(left) 'right '(down) 'down '(right) 'left '(up)}
+                          \/ {'up '(right) 'right '(up) 'down '(left) 'left '(down)}
+                          \| {'up '(up) 'down '(down) 'left '(up down) 'right '(up down)}
+                          \- {'up '(left right) 'down '(left right) 'left '(left) 'right '(right)}})
+
+  (defn reflect [light mirror]
+    (map #(light-move % light) ((reflect-positions mirror) (:direction light))))
+
+
+  (defn outside-of-map? [pos size]
+    (not (and (and (pos? (:row pos)) (<= (:row pos) (:width size)))
+              (and (pos? (:col pos)) (<= (:col pos) (:height size))))))
+
+  (defn horizontal? [direction] (or (= direction 'right) (= direction 'left)))
+  (defn vertical? [direction] (or (= direction 'up) (= direction 'down)))
+
+  (defn teleport [light size]
+    (cond (horizontal? (:direction light)) (if (= 0 (:col (:pos light)))
+                                             (make-light (:direction light) (position (:row (:pos light)) (:width size)))
+                                             (make-light (:direction light) (position (:row (:pos light)) 1)))
+          (vertical? (:direction light)) (if (= 0 (:row (:pos light)))
+                                           (make-light (:direction light) (position (:height size) (:col (:pos light))))
+                                           (make-light (:direction light) (position 1 (:col (:pos light)))))))
+
+  (defn next-light [light tiles size]
+    (let [tile (tiles (:pos light))]
+      (map #(if (outside-of-map? (:pos %) size) (teleport % size) %) (if (mirror? tile) (reflect light tile) (list (make-light (:direction light) (pos-at (:direction light) (:pos light))))))))
+
+  (defn map-size [m]
+    {:width (count (first m))
+     :height (count m)})
+
+  (defn solve-2 [input]
+    (let [tiles (read-input input)
+          size (map-size input)]
+      (loop [lights (list (make-light 'right (position 1 1)))
+             energized #{}]
+        (let [current-energy (union energized (into #{} lights))]
+          (if (= energized current-energy)
+            (distinct (map :pos current-energy))
+            (recur (filter #(nil? (current-energy %)) (mapcat #(next-light % tiles size) lights))
+                   current-energy))))))
+
+  (defn solve-2 [input]
+    (let [tiles (read-input input)
+          size (map-size input)]
+      (loop [lights (list (make-light 'down (position 1 4)))
+             energized #{}]
+        (let [current-energy (union energized (into #{} lights))]
+          (if (= energized current-energy)
+            (distinct (map :pos current-energy))
+            (recur (filter #(nil? (current-energy %)) (mapcat #(next-light % tiles size) lights))
+                   current-energy))))))
+#+end_src
+
+#+RESULTS:
+| #'user/input             |
+| #'user/sample            |
+| #'user/sample1           |
+| #'user/inclusive-range   |
+| #'user/cart              |
+| #'user/position          |
+| #'user/positions         |
+| #'user/read-input        |
+| #'user/empty-tile?       |
+| #'user/mirror?           |
+| #'user/clockwise         |
+| #'user/unit-positions    |
+| #'user/pos-at            |
+| #'user/make-light        |
+| #'user/light-move        |
+| #'user/reflect-positions |
+| #'user/reflect           |
+| #'user/outside-of-map?   |
+| #'user/horizontal?       |
+| #'user/vertical?         |
+| #'user/teleport          |
+| #'user/next-light        |
+| #'user/map-size          |
+| #'user/solve-1           |
+| #'user/solve-1           |
+
+
+
+* Test
+#+begin_src clojure :noweb yes :noweb-ref yes
+#+end_src

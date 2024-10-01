@@ -1,0 +1,7 @@
+#+title: Aoc 2015
+
+* Day 2: I Was Told There Would Be No Math
+
+** [[~/aoc/2015/2/1/part_1.org][Part 1]]
+
+** [[~/aoc/2015/2/2/part_2.org][Part 2]]

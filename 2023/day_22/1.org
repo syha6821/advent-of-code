@@ -1,0 +1,167 @@
+* Imports
+#+name:imports
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (use '[clojure.string :only (split includes? trim replace ends-with? starts-with? replace-first join)])
+  (use '[clojure.string :only (split includes? trim replace ends-with? starts-with? replace-first join)])
+  (use '[clojure.math :only (sqrt pow)])
+  (use '[clojure.set :only (union rename-keys rename difference subset? superset?)])
+  (use '[clojure.spec.alpha :only (int-in-range?)])
+#+end_src
+
+#+RESULTS: imports
+
+
+* Input
+#+name:inputs
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (def input (split (slurp "./input.txt") #"\n"))
+  (def sample (split (slurp "./sample.txt") #"\n"))
+  (def sample2 (split (slurp "./sample2.txt") #"\n"))
+#+end_src
+
+#+RESULTS: inputs
+| #'user/input   |
+| #'user/sample  |
+| #'user/sample2 |
+
+
+* Solve
+** read-input
+#+name:read-input
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (defn char->int [char] (- (int char) 48))
+
+  (defn read-brick [input]
+    (let [[start end] (split input #"~")
+          read-coords (fn [coords] (zipmap '(:x :y :z) (map read-string (split coords #","))))]
+      {:start (read-coords start)
+       :end (read-coords end)}))
+
+  (defn read-bricks [input]
+    (map read-brick input))
+#+end_src
+
+** ranges
+#+name:ranges
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (defn make-range [start end]
+    {:start start :end end})
+
+  (defn add-range [added-range ranges]
+    (let [[first-range & rest-range] ranges]
+      (if (nil? first-range)
+        [added-range]
+        (cond (< (:end added-range) (:start first-range)) (apply conj [added-range] ranges)
+              (> (:start added-range) (:end first-range)) (apply conj [first-range] (add-range added-range rest-range))
+              :else (add-range (make-range (min (:start added-range) (:start first-range)) (max (:end added-range) (:end first-range))) rest-range)))))
+
+  (defn overlap? [r1 r2]
+    (not (or (<= (:end r1) (:start r2))
+             (>= (:start r1) (:end r2)))))
+#+end_src
+
+#+RESULTS: ranges
+| #'user/make-range |
+| #'user/add-range  |
+| #'user/overlap?   |
+
+** solve-1
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  <<inputs>>
+  <<read-input>>
+  <<ranges>>
+
+  (defn min-point [brick point]
+    (min (get-in brick [:start point]) (get-in brick [:end point])))
+
+  (defn max-point [brick point]
+    (max (get-in brick [:start point]) (get-in brick [:end point])))
+
+  (defn sort-bricks-by-z [bricks]
+    (group-by #(max-point % :z) bricks))
+
+  (defn brick-range [brick coord]
+    (make-range (coord (:start brick)) (inc (coord (:end brick)))))
+
+  (defn overlap-brick? [b1 b2]
+    (and (overlap? (brick-range b1 :x) (brick-range b2 :x))
+         (overlap? (brick-range b1 :y) (brick-range b2 :y))))
+
+  (def bottom-brick {:start {:x ##-Inf :y ##-Inf :z ##-Inf} :end {:x ##Inf :y ##Inf :z ##Inf}})
+
+  (defn fall-to [brick fell-bricks]
+    (loop [fall-point (dec (min-point brick :z))]
+      (if (some #(overlap-brick? % brick) (fell-bricks fall-point))
+        (let [fall-distance (- (get-in brick [:start :z]) (inc fall-point))]
+          (-> brick (update-in [:start :z] - fall-distance) (update-in [:end :z] - fall-distance)))
+        (recur (dec fall-point)))))
+
+  (defn after-fall [falling-bricks]
+    (loop [[[z fell] & falling] (sort-by key (sort-bricks-by-z falling-bricks))
+           fell-bricks {0 [bottom-brick]}]
+      (if (nil? fell)
+        fell-bricks
+        (recur falling
+               (reduce (fn [bricks brick]
+                         (let [after (fall-to brick bricks)]
+                           (update-in bricks [(max-point after :z)] (fnil merge []) after))) fell-bricks fell)))))
+
+  (defn support? [bottom top]
+    (and (overlap? (brick-range bottom :x) (brick-range top :x))
+         (overlap? (brick-range bottom :y) (brick-range top :y))))
+
+  (defn solve [input]
+    (let [bricks (mapcat val (dissoc (after-fall (read-bricks input)) 0))
+          group-by-end-z (group-by #(max-point % :z) bricks)
+          supports (into {} (map #(hash-map % (into #{} (filter (fn [s] (support? s %)) (group-by-end-z (dec (min-point % :z)))))) bricks))]
+      (- (count bricks) (count (into #{} (mapcat val (filter #(= 1 (count (val %))) supports)))))))
+
+  (defn count-falls [dangerous supports]
+    (loop [dangerous #{dangerous}
+           supports supports
+           result 0]
+      (let [next-dangerous (into #{} (map key (filter #(and (not (empty? (val %))) (subset? (val %) dangerous)) supports)))]
+        (if (empty? next-dangerous)
+          result
+          (recur (union dangerous next-dangerous)
+                 (reduce #(dissoc %1 %2) supports next-dangerous)
+                 (+ result (count next-dangerous)))))))
+
+  (defn solve2 [input]
+    (let [bricks (mapcat val (dissoc (after-fall (read-bricks input)) 0))
+          group-by-end-z (group-by #(max-point % :z) bricks)
+          supports (into {} (map #(hash-map % (into #{} (filter (fn [s] (support? s %)) (group-by-end-z (dec (min-point % :z)))))) bricks))
+          dangerous (into #{} (mapcat val (filter #(= 1 (count (val %))) supports)))]
+      (map #(count-falls % supports) dangerous)))
+#+end_src
+
+#+RESULTS:
+| #'user/input            |
+| #'user/sample           |
+| #'user/sample2          |
+| #'user/char->int        |
+| #'user/read-brick       |
+| #'user/read-bricks      |
+| #'user/make-range       |
+| #'user/add-range        |
+| #'user/overlap?         |
+| #'user/min-point        |
+| #'user/max-point        |
+| #'user/sort-bricks-by-z |
+| #'user/brick-range      |
+| #'user/overlap-brick?   |
+| #'user/bottom-brick     |
+| #'user/fall-to          |
+| #'user/after-fall       |
+| #'user/support?         |
+| #'user/solve            |
+| #'user/count-falls      |
+| #'user/solve2           |
+| #'user/count-falls      |
+| #'user/solve2           |
+
+
+* Test
+#+begin_src clojure :noweb yes :noweb-ref yes
+#+end_src

@@ -1,0 +1,171 @@
+* Imports
+#+name:imports
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (use '[clojure.string :only (split includes? trim)])
+#+end_src
+
+* Input
+#+name:inputs
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  (def input (split (slurp "./input.txt") #"\n"))
+  (def sample1 (split (slurp "./sample1.txt") #"\n"))
+  (def sample2 (split (slurp "./sample2.txt") #"\n"))
+  (def sample3 (split (slurp "./sample3.txt") #"\n"))
+#+end_src
+
+#+RESULTS: inputs
+| #'user/input   |
+| #'user/sample1 |
+| #'user/sample2 |
+| #'user/sample3 |
+
+* 1
+** read-input
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<input>>
+  (defn read-directions [input]
+    (flatten (repeat (seq (first input)))))
+
+  (defn parse-location-line [line]
+    (let [split-by-equal (split line #"=")
+          split-by-comma (split (second split-by-equal) #",")]
+      [(trim (first split-by-equal))
+       (apply str (rest (rest (first split-by-comma))))
+       (apply str (take 3 (trim (second split-by-comma))))]))
+
+  (defn read-locations [input]
+    (reduce (fn [result location]
+              (assoc result (first location) {\L (second location) \R (nth location 2)}))
+            (array-map)
+            (map parse-location-line (rest (rest input)))))
+
+  (defn destination? [location] (= location "ZZZ"))
+
+  (defn solve [input]
+    (let [locations (read-locations input)]
+      (loop [current-location "AAA"
+             [direction & rest-directions] (read-directions input)
+             result 0]
+        (if (destination? current-location)
+          result
+          (recur ((locations current-location) direction)
+                 rest-directions
+                 (inc result))))))
+
+  (solve input)
+#+end_src
+
+#+RESULTS:
+| #'user/read-directions     |
+| #'user/parse-location-line |
+| #'user/read-locations      |
+| #'user/destination?        |
+| #'user/solve               |
+| 17873                      |
+
+* 2
+** lcm
+#+name:lcm
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (defn gcd 
+    [a b]
+    (if (zero? b)
+      a
+      (recur b, (mod a b))))
+
+  (defn lcm 
+    [a b]
+    (/ (* a b) (gcd a b)))
+
+  (defn lcms
+    [a & rests]
+    (reduce (fn [x y] (lcm x y)) a rests))
+
+  (lcm 2 3)
+  (lcms 2 3 4)
+#+end_src
+
+#+RESULTS: lcm
+| #'user/gcd  |
+| #'user/lcm  |
+| #'user/lcms |
+| 6           |
+| 12          |
+
+** read-input
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<input>>
+  (defn read-directions [input]
+    (flatten (repeat (seq (first input)))))
+
+  (defn parse-location-line [line]
+    (let [split-by-equal (split line #"=")
+          split-by-comma (split (second split-by-equal) #",")]
+      [(trim (first split-by-equal))
+       (apply str (rest (rest (first split-by-comma))))
+       (apply str (take 3 (trim (second split-by-comma))))]))
+
+  (defn read-locations [input]
+    (reduce (fn [result location]
+              (assoc result (first location) {\L (second location) \R (nth location 2)}))
+            (array-map)
+            (map parse-location-line (rest (rest input)))))
+
+  (defn destination? [location] (= location "ZZZ"))
+
+  (defn end-with-Z? [location] (= (last location) \Z))
+  (defn end-with-A? [location] (= (last location) \A))
+
+  ;; (defn solve [input]
+  ;;   (let [locations (read-locations input)]
+  ;;     (loop [current-locations (map key (filter #(end-with-A? (first %)) locations))
+  ;;            [direction & rest-directions] (read-directions input)
+  ;;            result 0]
+  ;;       (if (every? end-with-Z? current-locations)
+  ;;         current-locations
+  ;;         (recur (map (fn [current-location] ((locations current-location) direction)) current-locations)
+  ;;                rest-directions
+  ;;                (inc result))))))
+
+  ;; (defn solve [input]
+  ;;   (let [locations (read-locations input)]
+  ;;     (loop [current-location (nth (map key (filter #(end-with-A? (first %)) locations)) 0)
+  ;;            [direction & rest-directions] (read-directions input)
+  ;;            result 0]
+  ;;       (if (end-with-Z? current-location)
+  ;;         result
+  ;;         (recur ((locations current-location) direction)
+  ;;                rest-directions
+  ;;                (inc result))))))
+
+  (defn solve [input x]
+    (let [locations (read-locations input)]
+      (loop [current-location (nth (map key (filter #(end-with-A? (first %)) locations)) x)
+             [direction & rest-directions] (read-directions input)
+             result 0]
+        (if (end-with-Z? current-location)
+          result
+          (recur ((locations current-location) direction)
+                 rest-directions
+                 (inc result))))))
+
+  (lcms 20803 19631 12599 21389 17287 17873)
+#+end_src
+
+#+RESULTS:
+| #'user/read-directions     |
+| #'user/parse-location-line |
+| #'user/read-locations      |
+| #'user/destination?        |
+| #'user/end-with-Z?         |
+| #'user/end-with-A?         |
+| #'user/solve               |
+| 15746133679061             |
+
+* Tests
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (println "good")
+#+end_src
+
+#+RESULTS:

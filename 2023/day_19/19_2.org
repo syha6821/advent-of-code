@@ -1,0 +1,133 @@
+* Imports
+#+name:imports
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (use '[clojure.string :only (split includes? trim replace ends-with? starts-with? replace-first join)])
+  (use '[clojure.string :only (split includes? trim replace ends-with? starts-with? replace-first join)])
+  (use '[clojure.math :only (sqrt pow)])
+  (use '[clojure.set :only (union rename-keys rename difference)])
+  (use '[clojure.spec.alpha :only (int-in-range?)])
+#+end_src
+
+#+RESULTS: imports
+
+
+* Input
+#+name:inputs
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (def input (split (slurp "./input.txt") #"\n"))
+  (def sample (split (slurp "./sample.txt") #"\n"))
+#+end_src
+
+#+RESULTS: inputs
+| class clojure.lang.Compiler$CompilerException |
+| class clojure.lang.Compiler$CompilerException |
+
+* Solve
+** read-input
+#+name:read-input
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (def sample-workflow "px{a<2006:qkq,m>2090:A,rfg}")
+  (def sample-rule "a<2006:qkq")
+
+  (defn workflow-name [workflow]
+    (apply str (take-while #(not= \{ %) workflow)))
+
+  (defn workflow-rules [workflow]
+    (split (apply str (butlast (rest (drop-while #(not= \{ %) workflow)))) #","))
+
+  (defn adjust-range [range sign num]
+    (cond (= sign '<) (make-range (:lower range) (min (:upper range) num))
+          (= sign '<=) (make-range (:lower range) (min (:upper range) (inc num)))
+          (= sign '>) (make-range (max (:lower range) (inc num)) (:upper range))
+          (= sign '>=) (make-range (max (:lower range) num) (:upper range))))
+
+  (defn opposite-sign [sign]
+    (cond (= sign '<) '>=
+          (= sign '>) '<=))
+
+  (defn read-rule [rule]
+    (if (not (includes? rule ":"))
+      (fn [ratings] {:pass (assoc ratings :destination rule) :fail nil})
+      (let [sign (if (= (second rule) \<) '< '>)
+            part (first rule)
+            part-num (read-string (apply str (take-while #(not= \: %) (drop 2 rule))))
+            destination (apply str (rest (drop-while #(not= \: %) rule)))]
+        (fn [ratings] {:pass (-> ratings
+                                (update-in [part] adjust-range sign part-num)
+                                (assoc-in [:destination] destination))
+                      :fail (update-in ratings [part] adjust-range (opposite-sign sign) part-num)}))))
+
+  (defn read-workflows [input]
+    (let [strings (first (partition-by empty? input))]
+      (reduce (fn [result str] (assoc result (workflow-name str) (map #(read-rule %) (workflow-rules str)))) {} strings)))
+#+end_src
+
+#+RESULTS: read-input
+| #'user/sample-workflow |
+| #'user/sample-rule     |
+| #'user/workflow-name   |
+| #'user/workflow-rules  |
+| #'user/adjust-range    |
+| #'user/opposite-sign   |
+| #'user/read-rule       |
+| #'user/read-workflows  |
+
+** solve-1
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  <<inputs>>
+  <<read-input>>
+
+  (defn make-range [l u] {:lower l :upper u})
+  (defn make-ratings [d x m a s] {:destination d \x x \m m \a a \s s})
+  (def default-ratings (apply make-ratings (merge (repeat 4 (make-range 1 4001)) "in")))
+  (defn accepted? [ratings] (= (:destination ratings) "A"))
+  (defn rejected? [ratings] (= (:destination ratings) "R"))
+
+  (defn process-workflows [ratings workflows]
+    (loop [ratings ratings
+           [workflow & rests] (workflows (:destination ratings))
+           result []]
+      (let [next (workflow ratings)]
+        (if (nil? (:fail next))
+          (merge result (:pass next))
+          (recur (:fail next)
+                 rests
+                 (merge result (:pass next)))))))
+
+  (defn accepted-ranges [workflows]
+    (loop [ratings [default-ratings]
+           result []]
+      (if (empty? ratings)
+        (map #(dissoc % :destination) result)
+        (let [next-ratings (mapcat #(process-workflows % workflows) ratings)]
+          (recur (remove #(or (accepted? %) (rejected? %)) next-ratings)
+                 (concat result (filter accepted? next-ratings)))))))
+
+  (defn sum-ratings [input]
+    (reduce + (map #(reduce (fn [result r] (* result (- (:upper r) (:lower r)))) 1 %) (map #(map val %) (accepted-ranges (read-workflows input))))))
+#+end_src
+
+#+RESULTS:
+| #'user/input             |
+| #'user/sample            |
+| #'user/sample-workflow   |
+| #'user/sample-rule       |
+| #'user/workflow-name     |
+| #'user/workflow-rules    |
+| #'user/adjust-range      |
+| #'user/opposite-sign     |
+| #'user/read-rule         |
+| #'user/read-workflows    |
+| #'user/make-range        |
+| #'user/make-ratings      |
+| #'user/default-ratings   |
+| #'user/accepted?         |
+| #'user/rejected?         |
+| #'user/process-workflows |
+| #'user/accepted-ranges   |
+| #'user/sum-ratings       |
+
+* Test
+#+begin_src clojure :noweb yes :noweb-ref yes
+#+end_src

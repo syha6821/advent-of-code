@@ -1,0 +1,93 @@
+* Imports
+#+name:imports
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (use '[clojure.string :only (split includes? trim)])
+#+end_src
+
+* Input
+#+name:inputs
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (def input (split (slurp "./input.txt") #"\n"))
+  (def sample (split (slurp "./sample.txt") #"\n"))
+#+end_src
+
+* Codes
+#+name:pos
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (defn pos-list [row col]
+    (mapcat (fn [r] (map (fn [c] (list r c)) (range 1 (inc col))))
+            (range 1 (inc row))))
+#+end_src
+
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  <<inputs>>
+  <<pos>>
+
+  (defn item-with-pos [input]
+    (let [row-length (count input)
+          col-length (count (first input))]
+      (map (fn [pos val] {:pos pos :val val}) (pos-list row-length col-length) (flatten (map #(seq %) input)))))
+
+  (defn symbols [input] (filter (fn [item] (and (not (= \. (item :val)))
+                                                (not (Character/isDigit (item :val))))) (item-with-pos input)))
+
+  (defn digits [input] (filter (fn [item] (Character/isDigit (item :val))) (item-with-pos input)))
+
+  (symbols sample)
+
+  (defn read-nums [line]
+    (loop [result []
+           rests (seq line)
+           current-pos 1]
+      (cond (empty? rests) result
+            (Character/isDigit (first rests)) (recur (merge result {:pos current-pos :val (read-string (apply str (take-while #(Character/isDigit %) rests)))})
+                                                     (drop-while #(Character/isDigit %) rests)
+                                                     (+ current-pos (count (take-while #(Character/isDigit %) rests))))
+            :else (recur result
+                         (drop-while #(not (Character/isDigit %)) rests)
+                         (+ current-pos (count (take-while #(not (Character/isDigit %)) rests)))))))
+#+end_src
+
+#+RESULTS:
+| #'user/input                                                                                                                          |
+| #'user/sample                                                                                                                         |
+| #'user/pos-list                                                                                                                       |
+| #'user/item-with-pos                                                                                                                  |
+| #'user/symbols                                                                                                                        |
+| #'user/digits                                                                                                                         |
+| ({:pos (2 4), :val \*} {:pos (4 7), :val \#} {:pos (5 4), :val \*} {:pos (6 6), :val \+} {:pos (9 4), :val \$} {:pos (9 6), :val \*}) |
+
+* Tests
+
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (drop-while #(Character/isDigit %) (seq "467..114.."))
+
+  (take-while #(Character/isDigit %) (seq "467..114.."))
+
+  (defn read-nums [line]
+    (loop [result []
+           rests (seq line)
+           current-pos 1]
+      (cond (empty? rests) result
+            (Character/isDigit (first rests)) (recur (merge result {:pos current-pos :val (read-string (apply str (take-while #(Character/isDigit %) rests)))})
+                                                     (drop-while #(Character/isDigit %) rests)
+                                                     (+ current-pos (count (take-while #(Character/isDigit %) rests))))
+            :else (recur result
+                         (drop-while #(not (Character/isDigit %)) rests)
+                         (+ current-pos (count (take-while #(not (Character/isDigit %)) rests)))))))
+
+  (read-nums "467..114..")
+  (read-nums "...*......")
+  (read-nums "..35..633.")
+  (read-nums "617*......")
+#+end_src
+
+#+RESULTS:
+| (\. \. \1 \1 \4 \. \.)                  |
+| (\4 \6 \7)                              |
+| #'user/read-nums                        |
+| [{:pos 1, :val 467} {:pos 6, :val 114}] |
+| []                                      |
+| [{:pos 3, :val 35} {:pos 7, :val 633}]  |
+| [{:pos 1, :val 617}]                    |

@@ -1,0 +1,90 @@
+* Imports
+#+name:imports
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (use '[clojure.string :only (split includes? trim replace ends-with? starts-with? replace-first join)])
+  (use '[clojure.math :only (sqrt pow)])
+  (use '[clojure.set :only (union)])
+#+end_src
+
+#+RESULTS: imports
+
+* Input
+#+name:inputs
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (def input (split (slurp "./input.txt") #"\n"))
+  (def sample (split (slurp "./sample.txt") #"\n"))
+#+end_src
+
+#+RESULTS: inputs
+| #'user/input  |
+| #'user/sample |
+
+* Solve
+** read-input
+#+name:read-input
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (defn read-input [input] (split (first input) #","))
+#+end_src
+
+#+RESULTS: read-input
+: #'user/read-input
+
+** hash
+#+name:hash
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (defn ascii [ch] (int ch))
+  (defn hash-char [ch start-value] (-> (+ start-value (ascii ch)) (* 17) (mod 256)))
+  (defn hash-str [string] (reduce (fn [result ch] (hash-char ch result)) 0 string))
+#+end_src
+
+#+RESULTS: read-input
+: #'user/read-input
+
+** solve-1
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  <<inputs>>
+  <<read-input>>
+  <<hash>>
+
+  (defn solve-1 [input] (apply + (map hash-str (read-input input))))
+#+end_src
+
+** solve-2
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  <<inputs>>
+  <<read-input>>
+  <<hash>>
+
+  (defn operator? [ch] (or (= ch \=) (= ch \-)))
+  (defn remove-ins? [ins] (= (:op ins) "-"))
+  (defn add-ins? [ins] (= (:op ins) "="))
+
+  (defn instruction [string]
+    (let [ins (map #(apply str %) (partition-by operator? string))
+          result {:label (first ins) :box (hash-str (first ins)) :op (second ins)}]
+      (if (= (second ins) "=")
+        (assoc result :facal (read-string (nth ins 2)))
+        result)))
+
+  (defn remove-lens [lenses label] (dissoc lenses label))
+  (defn add-lens [lenses label facal] (assoc lenses label facal))
+
+  (defn after-instruction [boxes ins]
+    (cond (remove-ins? ins) (assoc boxes (:box ins) (remove-lens (boxes (:box ins)) (:label ins)))
+          (add-ins? ins) (assoc boxes (:box ins) (add-lens (boxes (:box ins)) (:label ins) (:facal ins)))))
+
+  (defn solve-2 [input]
+    (reduce (fn [result ins] (after-instruction result ins)) {} (map instruction (read-input input))))
+
+  (defn calc-box [box]
+    (let [box-num (first box)
+          facals (map second (second box))]
+      (apply + (map #(* (inc box-num) %1 %2) facals (range 1 (inc (count facals)))))))
+#+end_src
+
+
+* Test
+#+begin_src clojure :noweb yes :noweb-ref yes
+#+end_src

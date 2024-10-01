@@ -1,0 +1,178 @@
+* Imports
+#+name:imports
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (use '[clojure.string :only (split includes? trim replace ends-with? starts-with? replace-first join)])
+  (use '[clojure.string :only (split includes? trim replace ends-with? starts-with? replace-first join)])
+  (use '[clojure.math :only (sqrt pow)])
+  (use '[clojure.set :only (union rename-keys rename difference)])
+  (use '[clojure.spec.alpha :only (int-in-range?)])
+  (require '[clojure.data.priority-map :refer [priority-map]])
+  (defn char->int [x] (Character/digit x 10))
+#+end_src
+
+#+RESULTS: imports
+: #'user/char->int
+
+
+* Input
+#+name:inputs
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (def input (split (slurp "./input.txt") #"\n"))
+  (def sample (split (slurp "./sample.txt") #"\n"))
+  (def sample1 (split (slurp "./sample1.txt") #"\n"))
+  (def sample2 (split (slurp "./sample2.txt") #"\n"))
+#+end_src
+
+#+RESULTS: inputs
+| #'user/input   |
+| #'user/sample  |
+| #'user/sample1 |
+| #'user/sample2 |
+
+
+* Solve
+** read-input
+#+name:read-input
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (defn inclusive-range [start end] (range start (inc end)))
+  (defn cart [f l1 l2]
+    (for [x l1 y l2] (f x y)))
+  (defn position [row col] {:row row :col col})
+  (defn positions [width height]
+    (cart position (inclusive-range 1 width) (inclusive-range 1 height)))
+
+  (defn positions 
+    ([width height] (cart position (inclusive-range 1 width) (inclusive-range 1 height)))
+    ([size] (cart position (inclusive-range 1 (:height size)) (inclusive-range 1 (:width size)))))
+
+  (defn input-size [m]
+    {:width (count (first m))
+     :height (count m)})
+
+  (defn valid-pos? [pos size]
+    (and (int-in-range? 1 (inc (:width size)) (:col pos))
+         (int-in-range? 1 (inc (:height size)) (:row pos))))
+
+  (def directions '(up right down left))
+  (def opposite {'up 'down 'right 'left 'down 'up 'left 'right})
+  (defn opposite-of [direction] (opposite direction))
+  (defn but-backward [direction] (remove #(= % (opposite-of direction)) directions))
+  (defn possible-directions [direction count] (remove #(= % (if (= count 3) direction nil)) (but-backward direction)))
+  (def unit-positions (zipmap '(up right down left) (map #(apply position %) '((-1 0) (0 1) (1 0) (0 -1)))))
+  (defn pos-at [direction pos] (merge-with + pos (unit-positions direction)))
+  (defn adjacent-positions [pos size] (filter #(valid-pos? % size) (map #(pos-at % pos) directions)))
+  (defn pos-direction [pos1 pos2] (let [pos (merge-with - pos1 pos2)]
+                                    (cond (= pos (position 1 0)) 'up
+                                          (= pos (position 0 -1)) 'right
+                                          (= pos (position -1 0)) 'down
+                                          (= pos (position 0 1)) 'left)))
+
+  (defn loss-< [x y]
+    (< (:loss x) (:loss y)))
+
+  (defn make-loss-map [input]
+    (zipmap (positions (count input) (count (first input)))
+            (map char->int (apply str input))))
+
+  (defn make-route [pos loss direction count]
+    {:pos pos :loss loss :direction direction :count count})
+#+end_src
+
+#+RESULTS: read-input
+| #'user/inclusive-range     |
+| #'user/cart                |
+| #'user/position            |
+| #'user/positions           |
+| #'user/positions           |
+| #'user/input-size          |
+| #'user/valid-pos?          |
+| #'user/directions          |
+| #'user/opposite            |
+| #'user/opposite-of         |
+| #'user/but-backward        |
+| #'user/possible-directions |
+| #'user/unit-positions      |
+| #'user/pos-at              |
+| #'user/adjacent-positions  |
+| #'user/pos-direction       |
+| #'user/loss-<              |
+| #'user/make-loss-map       |
+| #'user/make-route          |
+
+** solve-1
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  <<inputs>>
+  <<read-input>>
+
+  (defn calc-adjacents [route map-size loss-map]
+    (filter #(and (>= 3 (:count %)) (not= (opposite-of (:direction route)) (:direction %)))
+            (map (fn [pos] (let [direction (pos-direction (:pos route) pos)]
+                             (make-route pos
+                                         (+ (:loss route) (loss-map pos))
+                                         direction
+                                         (if (= (:direction route) direction) (inc (:count route)) 1))))
+                 (adjacent-positions (:pos route) map-size))))
+
+  (defn better-route? [route1 route2]
+    (let [{loss1 :loss count1 :count} route1
+          {loss2 :loss count2 :count} route2]
+      (cond (not= (:direction route1) (:direction route2)) false
+            (= loss1 loss2) (< count1 count2)
+            (= count1 count2) (< loss1 loss2)
+            :else (and (< loss1 loss2) (< count1 count2)))))
+
+  (defn had-better-route? [route visited-routes]
+    (some #(better-route? % route) (visited-routes (:pos route))))
+
+  (defn solve-1 [input]
+    (let [start-pos (position 1 1)
+          destination (position (count input) (count (first input)))
+          map-size (input-size input)
+          loss-map (make-loss-map input)]
+      (loop [calculated-routes (priority-map (make-route (position 1 1) 0 nil 0) 0)
+             visited-routes (reduce #(assoc %1 %2 #{}) {} (positions map-size))]
+        (let [visiting-route (key (peek calculated-routes))
+              calculated-adjacents (remove #(had-better-route? % visited-routes) (calc-adjacents visiting-route map-size loss-map))
+              dest (some #(and (= (:pos %) destination) %) calculated-adjacents)]
+          (if dest
+            (:loss dest)
+            (recur (reduce (fn [result adj] (assoc result adj (:loss adj))) (pop calculated-routes) calculated-adjacents)
+                   (update-in visited-routes [(:pos visiting-route)] conj visiting-route)))))))
+#+end_src
+
+#+RESULTS:
+| #'user/char->int           |
+| #'user/input               |
+| #'user/sample              |
+| #'user/sample1             |
+| #'user/sample2             |
+| #'user/inclusive-range     |
+| #'user/cart                |
+| #'user/position            |
+| #'user/positions           |
+| #'user/positions           |
+| #'user/input-size          |
+| #'user/valid-pos?          |
+| #'user/directions          |
+| #'user/opposite            |
+| #'user/opposite-of         |
+| #'user/but-backward        |
+| #'user/possible-directions |
+| #'user/unit-positions      |
+| #'user/pos-at              |
+| #'user/adjacent-positions  |
+| #'user/pos-direction       |
+| #'user/loss-<              |
+| #'user/make-loss-map       |
+| #'user/make-route          |
+| #'user/calc-adjacents      |
+| #'user/better-route?       |
+| #'user/had-better-route?   |
+| #'user/solve-1             |
+
+
+* Test
+#+begin_src clojure :noweb yes :noweb-ref yes
+#+end_src
+

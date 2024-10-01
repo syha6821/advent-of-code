@@ -1,0 +1,126 @@
+* Imports
+#+name:imports
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (use '[clojure.string :only (split includes? trim replace ends-with? starts-with? replace-first join)])
+  (use '[clojure.string :only (split includes? trim replace ends-with? starts-with? replace-first join)])
+  (use '[clojure.math :only (sqrt pow)])
+  (use '[clojure.set :only (union rename-keys rename difference)])
+  (use '[clojure.spec.alpha :only (int-in-range?)])
+#+end_src
+
+#+RESULTS: imports
+
+* Input
+#+name:inputs
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (def input (split (slurp "./input.txt") #"\n"))
+  (def sample (split (slurp "./sample.txt") #"\n"))
+#+end_src
+
+* Solve
+** position
+#+name:position
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (def directions '(\U \R \D \L))
+
+  (defn cart [f l1 l2]
+    (for [x l1 y l2] (f x y)))
+
+  (defn position [row col] {:row row :col col})
+
+  (defn positions 
+    ([width height] (cart position (range 1 (inc height)) (range 1 (inc width))))
+    ([size] (positions (:width size)) (positions :height size)))
+
+  (def unit-positions (zipmap directions (map #(apply position %) '((-1 0) (0 1) (1 0) (0 -1)))))
+
+  (defn valid-pos? [pos size]
+    (and (int-in-range? 1 (inc (:width size)) (:col pos))
+         (int-in-range? 1 (inc (:height size)) (:row pos))))
+
+  (defn adjacent-positions [pos size] (filter #(valid-pos? % size) (map #(merge-with + pos %) (map val unit-positions))))
+#+end_src
+
+#+RESULTS: position
+| #'user/directions         |
+| #'user/cart               |
+| #'user/position           |
+| #'user/positions          |
+| #'user/unit-positions     |
+| #'user/valid-pos?         |
+| #'user/adjacent-positions |
+
+** read-input
+#+name:read-input
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<position>>
+  (defn read-size [input] {:width (count (first input)) :height (count input)})
+
+  (defn read-garden [input]
+    (let [width (count (first input))
+          height (count input)
+          pos (positions width height)]
+      (zipmap pos (map #(hash-map :pos %1 :tile %2) pos (apply str input)))))
+#+end_src
+
+#+RESULTS: read-input
+| #'user/directions         |
+| #'user/cart               |
+| #'user/position           |
+| #'user/positions          |
+| #'user/unit-positions     |
+| #'user/valid-pos?         |
+| #'user/adjacent-positions |
+| #'user/read-size          |
+| #'user/read-garden        |
+
+** solve-1
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  <<inputs>>
+  <<read-input>>
+
+  (defn start? [tile] (= (:tile tile) \S))
+  (defn grass? [tile] (or (= (:tile tile) \.) (start? tile)))
+  (defn grass? [tile] (= (:tile tile) \.))
+  (defn rock? [tile] (= (:tile tile) \#))
+  (defn reachable-tiles-from [tile size garden] (remove #(rock? %) (map garden (adjacent-positions (:pos tile) size))))
+
+  (defn solve [input step]
+    (let [garden (read-garden input)
+          size (read-size input)]
+      (loop [steps step
+             result [(some #(and (start? (val %)) (val %)) garden)]]
+        (if (zero? steps)
+          (count result)
+          (recur (dec steps)
+                 (distinct (remove nil? (mapcat #(reachable-tiles-from % size garden) result))))))))
+
+  (distinct (remove nil?
+                    (mapcat #(reachable-tiles-from % (read-size sample) (read-garden sample))
+                            [(some #(and (start? %) %) (map val (read-garden sample)))])))
+#+end_src
+
+#+RESULTS:
+| #'user/input                                                          |
+| #'user/sample                                                         |
+| #'user/directions                                                     |
+| #'user/cart                                                           |
+| #'user/position                                                       |
+| #'user/positions                                                      |
+| #'user/unit-positions                                                 |
+| #'user/valid-pos?                                                     |
+| #'user/adjacent-positions                                             |
+| #'user/read-size                                                      |
+| #'user/read-garden                                                    |
+| #'user/start?                                                         |
+| #'user/grass?                                                         |
+| #'user/grass?                                                         |
+| #'user/rock?                                                          |
+| #'user/reachable-tiles-from                                           |
+| #'user/solve                                                          |
+| ({:tile \., :pos {:row 5, :col 6}} {:tile \., :pos {:row 6, :col 5}}) |
+
+* Test
+#+begin_src clojure :noweb yes :noweb-ref yes
+#+end_src

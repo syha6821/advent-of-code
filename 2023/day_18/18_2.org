@@ -1,0 +1,294 @@
+* Imports
+#+name:imports
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (use '[clojure.string :only (split includes? trim replace ends-with? starts-with? replace-first join)])
+  (use '[clojure.math :only (sqrt pow)])
+  (use '[clojure.set :only (union rename-keys rename difference)])
+  (use '[clojure.spec.alpha :only (int-in-range?)])
+#+end_src
+
+#+RESULTS: imports
+
+
+* Input
+#+name:inputs
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (def input (split (slurp "./input.txt") #"\n"))
+  (def sample (split (slurp "./sample.txt") #"\n"))
+#+end_src
+
+#+RESULTS: inputs
+| class clojure.lang.Compiler$CompilerException |
+| class clojure.lang.Compiler$CompilerException |
+
+
+* Solve
+** read-input
+#+name:read-input
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (defn inclusive-range [start end] (range start (inc end)))
+  (defn position [row col] {:row row :col col})
+
+  (defn remove-bracket [str]
+    (subs str 1 (dec (count str))))
+
+  (defn hex->dec [hex-str]
+    (read-string (str "0x" hex-str)))
+
+  (def num-direction-map {\0 \R \1 \D \2 \L \3 \U})
+  (defn make-plan [input]
+    (map #(zipmap [:direction :count]
+                  (let [color (remove-bracket (last (split % #" ")))
+                        hex (apply str (rest (butlast color)))
+                        direction-num (last color)]
+                    (list (num-direction-map direction-num)
+                          (hex->dec hex))))
+         input))
+#+end_src
+
+** solve-1
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  <<inputs>>
+  <<read-input>>
+
+  (defn make-line [pos ins]
+    (let [{dir :direction count :count} ins
+          {row :row col :col} pos]
+      (cond (= \U dir) {:min-row (- row count) :max-row row :min-col col :max-col col}
+            (= \R dir) {:min-row row :max-row row :min-col col :max-col (+ col count)}
+            (= \D dir) {:min-row row :max-row (+ row count) :min-col col :max-col col}
+            (= \L dir) {:min-row row :max-row row :min-col (- col count)  :max-col col})))
+
+  (defn next-pos [pos ins]
+    (let [{dir :direction count :count} ins
+          {row :row col :col} pos]
+      (cond (= \U dir) (position (- row count) col)
+            (= \R dir) (position row (+ col count))
+            (= \D dir) (position (+ row count) col)
+            (= \L dir) (position row (- col count)))))
+
+  (defn read-lines [plan]
+    (loop [pos (position 1 1)
+           [ins & rest-plan] plan
+           result []]
+      (if (nil? ins)
+        result
+        (recur (next-pos pos ins)
+               rest-plan
+               (merge result (make-line pos ins))))))
+
+  (defn changing-points [plan]
+    (->> (map list plan (read-lines plan))
+         (filter (fn [[{dir :direction} _]] (or (= dir \R) (= dir \L))))
+         (reduce (fn [result [{dir :direction} {row :min-row min-col :min-col max-col :max-col}]]
+                   (update-in result [row] (fnil (fn [a b] (sort-by :max (merge a b))) []) {:direction dir :min min-col :max max-col})) (sorted-map))))
+
+  (defn count-digs [ranges]
+    (apply + (map #(inc (- (:max %) (:min %))) ranges)))
+
+  (defn make-range [min max] {:min min :max max})
+
+  (defn add-range [& ranges]
+    (if (>= 1 (count ranges))
+      ranges
+      (let [ranges (sort-by :min ranges)
+            range1 (first ranges)
+            range2 (second ranges)
+            {min1 :min max1 :max} range1
+            {min2 :min max2 :max} range2]
+        (cond (< (inc max1) min2) (concat [range1] (apply add-range (concat [range2] (nthrest ranges 2))))
+              (> min1 (inc max2)) (concat [range2 range1] (nthrest ranges 2))
+              :else (apply add-range (concat [(make-range (min min1 min2) (max max1 max2))] (nthrest ranges 2)))))))
+
+  (defn sub-range [sub ranges]
+    (if (empty? ranges)
+      []
+      (let [ranges (sort-by :min ranges)
+            range1 (first ranges)
+            {submin :min submax :max} sub
+            {min1 :min max1 :max} range1]
+        (cond (< max1 submin) (concat [range1] (sub-range sub (rest ranges)))
+              (> min1 submax) ranges
+              (and (> submin min1) (< submax max1)) (concat [(make-range min1 submin) (make-range submax max1)] (rest ranges))
+              (and (<= submin min1) (>= submax max1)) (sub-range sub (rest ranges))
+              (= submax max1) (concat [(make-range min1 submin)] (rest ranges))
+              (= min1 submin) (concat [(make-range submax max1)] (rest ranges))
+              (> submax max1) (concat [(make-range min1 submin)] (rest ranges))
+              (> min1 submin) (concat [(make-range submax max1)] (rest ranges))
+              ))))
+
+  (defn solve-plan [plan]
+    (let [changes (changing-points plan)
+          add-dir (:direction (first (val (first changes))))
+          sub-dir (if (= add-dir \R) \L \R)]
+      (loop [[change & rests] changes
+             previous-digs []
+             previous-count 0
+             result 0]
+        (if (empty? rests)
+          (+ result previous-count)
+          (let [next-digs (reduce (fn [digs c] (if (= add-dir (:direction c)) (apply add-range c digs) (sub-range c digs)))
+                                  previous-digs (val change))
+                next-count (count-digs next-digs)
+                current-count (count-digs (reduce (fn [digs c] (if (= add-dir (:direction c)) (apply add-range c digs) (sub-range c digs)))
+                                                  previous-digs (filter #(= \R (:direction %)) (val change))))]
+            (recur rests
+                   next-digs
+                   next-count
+                   (+ result
+                      (* (- (key (first rests)) (key change) 1)
+                         next-count)
+                      current-count)))))))
+
+  (defn solve-plan [plan]
+    (let [changes (changing-points plan)
+          add-dir (:direction (first (val (first changes))))
+          sub-dir (if (= add-dir \R) \L \R)]
+      (loop [[change & rests] changes
+             previous-digs []
+             previous-count 0
+             result 0]
+        (let [next-digs (reduce (fn [digs c] (if (= add-dir (:direction c)) (apply add-range c digs) (sub-range c digs)))
+                                previous-digs (val change))
+              next-count (count-digs next-digs)
+              current-count (count-digs (reduce (fn [digs c] (if (= add-dir (:direction c)) (apply add-range c digs) (sub-range c digs)))
+                                                previous-digs (filter #(= \R (:direction %)) (val change))))]
+          ;; (println "current : " (reduce (fn [digs c] (if (= add-dir (:direction c)) (apply add-range c digs) (sub-range c digs)))
+          ;;                                       previous-digs (filter #(= \R (:direction %)) (val change))))
+          ;; (println "nexts : " (reduce (fn [digs c] (if (= add-dir (:direction c)) (apply add-range c digs) (sub-range c digs)))
+          ;;                       previous-digs (val change)))
+          ;; (println)
+          (if (empty? rests)
+            (+ result previous-count)
+            (recur rests
+                   next-digs
+                   next-count
+                   (+ result
+                      (* (- (key (first rests)) (key change) 1)
+                         next-count)
+                      current-count)))))))
+#+end_src
+
+#+RESULTS:
+| #'user/input             |
+| #'user/sample            |
+| #'user/inclusive-range   |
+| #'user/position          |
+| #'user/remove-bracket    |
+| #'user/hex->dec          |
+| #'user/num-direction-map |
+| #'user/make-plan         |
+| #'user/make-line         |
+| #'user/next-pos          |
+| #'user/read-lines        |
+| #'user/changing-points   |
+| #'user/count-digs        |
+| #'user/make-range        |
+| #'user/add-range         |
+| #'user/sub-range         |
+| #'user/sub-range         |
+| #'user/solve-plan        |
+| #'user/solve-plan        |
+
+
+* Test
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (def sample-plan [{:direction \R :count 3}
+                    {:direction \D :count 5}
+                    {:direction \R :count 3}
+                    {:direction \U :count 5}
+                    {:direction \R :count 3}
+                    {:direction \D :count 10}
+                    {:direction \L :count 9}
+                    {:direction \U :count 10}])
+
+  (def square-plan [{:direction \R :count 4}
+                    {:direction \D :count 4}
+                    {:direction \L :count 4}
+                    {:direction \U :count 4}])
+
+  (def f-plan [{:direction \R :count 3}
+               {:direction \D :count 2}
+               {:direction \R :count 2}
+               {:direction \D :count 2}
+               {:direction \L :count 7}
+               {:direction \U :count 1}
+               {:direction \R :count 2}
+               {:direction \U :count 3}])
+
+  (def cross-plan [{:direction \R :count 3}
+                   {:direction \D :count 3}
+                   {:direction \R :count 3}
+                   {:direction \D :count 3}
+                   {:direction \L :count 3}
+                   {:direction \D :count 3}
+                   {:direction \L :count 3}
+                   {:direction \U :count 3}
+                   {:direction \L :count 3}
+                   {:direction \U :count 3}
+                   {:direction \R :count 3}
+                   {:direction \U :count 3}])
+
+
+  (def larva-plan [{:direction \R :count 5}
+                   {:direction \D :count 3}
+                   {:direction \L :count 2}
+                   {:direction \D :count 3}
+                   {:direction \L :count 6}
+                   {:direction \U :count 3}
+                   {:direction \R :count 3}
+                   {:direction \U :count 3}])
+
+  (def diamond-plan [{:direction \R :count 2}
+                     {:direction \D :count 2}
+                     {:direction \R :count 2}
+                     {:direction \D :count 2}
+                     {:direction \R :count 2}
+                     {:direction \D :count 2}
+                     {:direction \L :count 2}
+                     {:direction \D :count 2}
+                     {:direction \L :count 2}
+                     {:direction \D :count 2}
+
+                     {:direction \L :count 2}
+                     {:direction \U :count 2}
+                     {:direction \L :count 2}
+                     {:direction \U :count 2}
+                     {:direction \L :count 2}
+                     {:direction \U :count 2}
+                     {:direction \R :count 2}
+                     {:direction \U :count 2}
+                     {:direction \R :count 2}
+                     {:direction \U :count 2}])
+
+  (def lightning-plan [{:direction \R :count 3}
+                       {:direction \D :count 3}
+                       {:direction \L :count 1}
+                       {:direction \D :count 3}
+                       {:direction \L :count 3}
+                       {:direction \D :count 3}
+                       {:direction \L :count 5}
+                       {:direction \U :count 3}
+                       {:direction \R :count 3}
+                       {:direction \U :count 3}
+                       {:direction \R :count 3}
+                       {:direction \U :count 3}])
+#+end_src
+
+#+RESULTS:
+| #'user/sample-plan    |
+| #'user/square-plan    |
+| #'user/f-plan         |
+| #'user/cross-plan     |
+| #'user/larva-plan     |
+| #'user/diamond-plan   |
+| #'user/lightning-plan |
+
+without-start-point
+(changing-points sample-plan)
+{1
+ [{:direction \R, :min-col 2, :max-col 4}
+  {:direction \R, :min-col 8, :max-col 10}],
+ 6 [{:direction \R, :min-col 5, :max-col 7}],
+ 11 [{:direction \L, :min-col 1, :max-col 9}]}

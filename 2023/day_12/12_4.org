@@ -1,0 +1,158 @@
+* Imports
+#+name:imports
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (use '[clojure.string :only (split includes? trim replace ends-with? starts-with? replace-first join)])
+  (use '[clojure.math :only (sqrt pow)])
+  (use '[clojure.set :only (union)])
+#+end_src
+
+#+RESULTS: imports
+
+* Input
+#+name:inputs
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (def input (split (slurp "./input.txt") #"\n"))
+  (def sample (split (slurp "./sample.txt") #"\n"))
+#+end_src
+
+#+name:samples
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (def sample1 (read-line "???.### 1,1,3"))
+  (def sample2 (read-line ".??..??...?##. 1,1,3"))
+  (def sample3 (read-line "?#?#?#?#?#?#?#? 1,3,1,6"))
+  (def sample4 (read-line "????.#...#... 4,1,1"))
+  (def sample5 (read-line "????.######..#####. 1,6,5"))
+  (def sample6 (read-line "?###???????? 3,2,1"))
+  (def sample7 (read-line "???.###????.###????.###????.###????.### 1,1,3,1,1,3,1,1,3,1,1,3,1,1,3"))
+#+end_src
+
+* Solve
+** read-input
+#+name:read-input
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (defn read-line [line]
+    (let [split-by-space (split line #" ")]
+      (hash-map :record (first split-by-space) :sizes (map read-string (split (second split-by-space) #",")))))
+
+  (defn read-input [input]
+    (map read-line input))
+
+  (defn unfold [record]
+    (hash-map :record (subs (apply str (repeat 5 (str "?" (:record record)))) 1)
+              :sizes (apply concat (repeat 5 (:sizes record)))))
+#+end_src
+
+#+RESULTS: read-input
+| #'user/read-line  |
+| #'user/read-input |
+
+** spring-states
+#+name:spring-states
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (defn working? [spring] (= spring \.))
+  (defn damaged? [spring] (= spring \#))
+  (defn unknown? [spring] (= spring \?))
+#+end_src
+
+** solve
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  <<inputs>>
+  <<read-input>>
+  <<samples>>
+  <<spring-states>>
+
+  (defn solve-first-unknown [record]
+    [(replace-first record \? \.)
+     (replace-first record \? \#)])
+
+  (defn first-group [record]
+    (let [partitioned (partition-by #(not (working? %)) record)]
+      (loop [[part & rests] partitioned
+             pos 0]
+        (cond (or (some unknown? part) (nil? part)) {:pos -1 :size -1}
+              (every? damaged? part) {:pos pos :size (count part)}
+              :else (recur rests
+                           (+ pos (count part)))))))
+
+  (defn record-freq [spring] (union {:. 0 :# 0 :? 0} (frequencies spring)))
+
+  (defn clean-record? [record]
+    (not (some unknown? record)))
+
+  (defn matches [size record]
+    (let [match-group (first-group record)
+          match-size (:size match-group)
+          match-pos (:pos match-group)]
+      (cond (< size match-size) nil
+            (= size match-size) [{:pos match-pos :record (apply str (drop-while working? (drop (+ match-pos match-size) record)))}]
+            (and (clean-record? record) (not= size match-size)) nil 
+            :else (mapcat #(matches size %) (solve-first-unknown record)))))
+
+  (defn matches [size record]
+    (let [match-group (first-group record)
+          match-size (:size match-group)
+          match-pos (:pos match-group)
+          matched (not= -1 match-pos)]
+      (cond (and matched (not= size match-size)) nil
+            (= size match-size) [{:pos match-pos :record (apply str (drop-while working? (drop (+ match-pos match-size) record)))}]
+            (and (clean-record? record) (not= size match-size)) nil 
+            :else (mapcat #(matches size %) (solve-first-unknown record)))))
+
+  (defn possible-records [sizes record]
+    (loop [[size & rest-sizes] sizes
+           records [{:previous 1 :record record}]]
+      ;; (println "records : " records "/ at size : " size)
+      (if (nil? size)
+        (filter (fn [r] (every? #(not (damaged? %)) (:record r))) records)
+        ;; records
+        (let [next-positions (mapcat (fn [record]
+                                       (map (fn [match] {:previous (:previous record) :pos (:pos match) :record (:record match)})
+                                            (matches size (:record record))))
+                                     records)]
+          (recur rest-sizes
+                 (map (fn [[rec val]] {:previous (apply + (map :previous val))
+                                       :record rec})
+                      (group-by :record next-positions)))))))
+
+  (defn solve [sample]
+    (possible-records (:sizes sample) (:record sample)))
+
+  (defn solve-unfold [sample]
+    (possible-records (:sizes (unfold sample)) (:record (unfold sample))))
+
+  (defn s [sample]
+    (apply +' (map (fn [r] (let [result (apply + (map :previous (solve-unfold r)))] (println result) result)) (read-input sample))))
+#+end_src
+
+#+RESULTS:
+| #'user/input               |
+| #'user/sample              |
+| #'user/read-line           |
+| #'user/read-input          |
+| #'user/unfold              |
+| #'user/sample1             |
+| #'user/sample2             |
+| #'user/sample3             |
+| #'user/sample4             |
+| #'user/sample5             |
+| #'user/sample6             |
+| #'user/sample7             |
+| #'user/working?            |
+| #'user/damaged?            |
+| #'user/unknown?            |
+| #'user/solve-first-unknown |
+| #'user/first-group         |
+| #'user/record-freq         |
+| #'user/clean-record?       |
+| #'user/matches             |
+| #'user/matches             |
+| #'user/possible-records    |
+| #'user/solve               |
+| #'user/solve-unfold        |
+| #'user/s                   |
+
+(time (possible-records '(1 9 1 1 1 9 1 1) "????#?#?????????#?????#?#?????????#"))
+8529308262480 xxx
+
+8475948826693

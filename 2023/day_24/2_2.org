@@ -1,0 +1,186 @@
+* Imports
+#+name:imports
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (use '[clojure.string :only (split includes? trim replace ends-with? starts-with? replace-first join)])
+  (use '[clojure.string :only (split includes? trim replace ends-with? starts-with? replace-first join)])
+  (use '[clojure.math :only (sqrt pow)])
+  (use '[clojure.set :only (union rename-keys rename difference subset? superset?)])
+  (use '[clojure.spec.alpha :only (int-in-range?)])
+#+end_src
+
+#+RESULTS: imports
+
+
+* Input
+#+name:inputs
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (def input (split (slurp "./input.txt") #"\n"))
+  (def sample (split (slurp "./sample.txt") #"\n"))
+  (def sample2 (split (slurp "./sample2.txt") #"\n"))
+#+end_src
+
+#+RESULTS: inputs
+| #'user/input   |
+| #'user/sample  |
+| #'user/sample2 |
+
+
+* Solve
+** read-input
+#+name:read-input
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (defn line->xyz [line]
+    (zipmap '(:x :y :z) (map read-string (split line #","))))
+
+  (defn read-hailstone [line]
+    (let [[position velocity] (split line #"@")
+          pos (line->xyz position)
+          vel (line->xyz velocity)]
+      {:pos pos
+       :og pos
+       :vel vel}))
+
+  (defn read-input [input]
+    (reduce (fn [result hailstone] (assoc result (:pos hailstone) hailstone)) {} (map read-hailstone input)))
+#+end_src
+
+#+RESULTS: read-input
+| #'user/line->xyz      |
+| #'user/read-hailstone |
+| #'user/read-input     |
+
+** solve-1
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  <<inputs>>
+  <<read-input>>
+
+  (defn after-one-second [hails]
+    (reduce (fn [result [og-pos hail]]
+              (let [new-pos (merge-with + (:pos hail) (:vel hail))]
+                (assoc result og-pos (assoc hail :pos new-pos)))) {} hails))
+
+  (defn after-n-second [hails n]
+    (reduce (fn [result [og-pos hail]]
+              (let [new-pos (merge-with + (:pos hail) (merge-with * (:vel hail) {:x n :y n :z n}))]
+                (assoc result og-pos (assoc hail :pos new-pos)))) {} hails))
+
+  (defn after-n-second-hail [hail n]
+    (assoc hail :pos (merge-with + (:og hail) (merge-with * (:vel hail) {:x n :y n :z n}))))
+
+  (defn calc-velocity [prev-pos current-pos time]
+    (reduce #(assoc %1 (key %2) (/ (val %2) time)) {} (merge-with - current-pos prev-pos)))
+
+  (defn make-stone [h1 h2 time]
+    (let [start (:pos h1)
+          vel (calc-velocity (:pos h1) (:pos h2) time)]
+      {:first h1 :second h2 :pos (:pos h2) :vel vel}))
+
+  (defn paralell? [stone hail]
+    (some #(and (not= ((:pos stone) %) ((:pos hail) %)) (= ((:vel stone) %) ((:vel hail) %))) '(:x :y :z)))
+
+  (defn cross-time [stone hail]
+    (let [coords (remove #(and (= ((:pos stone) %) ((:pos hail) %)) (= ((:vel stone) %) ((:vel hail) %))) '(:x :y :z))]
+      (zipmap coords (map #(/ (- ((:pos hail) %) ((:pos stone) %)) (- ((:vel stone) %) ((:vel hail) %))) coords))))
+
+  (defn cross-point [stone hail]
+    (let [times (cross-time stone hail)
+          time (val (first times))]
+      (and (apply = (map val times))
+           (merge-with + (:pos hail) (merge-with * (:vel hail) {:x time :y time :z time})))))
+
+  (defn cross? [stone hail]
+    (and (not (paralell? stone hail))
+         (cross-point stone hail)))
+
+  (defn next-seconds [{first :first second :second}]
+    (if (= (inc first) second)
+      {:first 1 :second (inc second)}
+      {:first (inc first) :second second}))
+
+  (defn next-seconds [{first :first second :second}]
+    (if (= (inc first) second)
+      {:first 1 :second (inc second)}
+      {:first (inc first) :second second}))
+
+  (defn hail-combs [hails]
+    (mapcat (fn [[pos hail]] (map #(list hail (val %)) (dissoc hails pos))) hails))
+
+  (defn two-hail-comb [hails]
+    (list (val (first hails)) (val (second hails))))
+
+  (defn two-hail-comb [hails]
+    (list (val (second hails)) (val (first hails))))
+
+  (defn manual-comb [hails]
+    (list ((read-input input) {:x 1147480396461 :y 328680810927084 :z 131081474315112})
+          ((read-input input) {:x 11609655378627 :y 86538947451740 :z 95867546502558})))
+
+  (defn solve [input]
+    (let [hails (read-input input)
+          comb (two-hail-comb hails)]
+      (loop [seconds {:first 0 :second 1}]
+        (let [stone (make-stone (after-n-second-hail (first comb) (:first seconds))
+                                (after-n-second-hail (second comb) (:second seconds))
+                                (- (:second seconds) (:first seconds)))
+              found (every? #(cross? stone (after-n-second-hail (val %) (:second seconds))) hails)]
+          (println seconds (:vel stone))
+          (if found
+            stone
+            (recur (next-seconds seconds)))))))
+
+  (defn solve [input]
+    (let [hails (read-input input)
+          combs (hail-combs hails)]
+      (loop [seconds {:first 1 :second 2}]
+        (println seconds)
+        (let [stones (map #(make-stone (after-n-second-hail (first %) (:first seconds))
+                                       (after-n-second-hail (second %) (:second seconds))
+                                       (- (:second seconds) (:first seconds)))
+                          combs)
+              found (some (fn [stone] (and (every? #(cross? stone (after-n-second-hail (val %) (:second seconds))) hails) stone))
+                          stones)]
+          (if found
+            found
+            (recur (next-seconds seconds)))))))
+#+end_src
+
+#+RESULTS:
+| #'user/input               |
+| #'user/sample              |
+| #'user/sample2             |
+| #'user/line->xyz           |
+| #'user/read-hailstone      |
+| #'user/read-input          |
+| #'user/after-one-second    |
+| #'user/after-n-second      |
+| #'user/after-n-second-hail |
+| #'user/calc-velocity       |
+| #'user/make-stone          |
+| #'user/paralell?           |
+| #'user/cross-time          |
+| #'user/cross-point         |
+| #'user/cross?              |
+| #'user/next-seconds        |
+| #'user/next-seconds        |
+| #'user/hail-combs          |
+| #'user/two-hail-comb       |
+| #'user/two-hail-comb       |
+| #'user/manual-comb         |
+| #'user/solve               |
+| #'user/solve               |
+
+
+* Test
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (make-stone {:pos {:x 21 :y 14 :z 12}} {:pos {:x 15 :y 16 :z 16}} 2)
+
+  (cross-time (make-stone {:pos {:x 21 :y 14 :z 12}} {:pos {:x 15 :y 16 :z 16}} 2) {:pos {:x 17 :y 18 :z 20} :vel {:x -1 :y -1 :z -2}})
+
+  ((read-input input) {:x 1147480396461 :y 328680810927084 :z 131081474315112})
+#+end_src
+
+:left
+{{:x 19, :y 13, :z 30} {:pos {:x 11, :y 17, :z 22}, :vel {:x -2, :y 1, :z -2}},
+ {:x 20, :y 25, :z 34} {:pos {:x 12, :y 17, :z 18}, :vel {:x -2, :y -2, :z -4}},
+ {:x 12, :y 31, :z 28} {:pos {:x 8, :y 23, :z 24}, :vel {:x -1, :y -2, :z -1}}}

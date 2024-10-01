@@ -1,0 +1,129 @@
+[[file:~/aoc/2015/aoc_2015.org::*Day 2: I Was Told There Would Be No Math][Day 2: I Was Told There Would Be No Math]]
+
+* Part 2
+** Description
+The elves are also running low on ribbon. Ribbon is all the same width,
+so they only have to worry about the length they need to order, which they would again like to be exact.
+
+The ribbon required to wrap a present is the shortest distance around its sides, or the smallest [[./images/perimeter.png][perimeter]] of any one face.
+Each present also requires a bow made out of ribbon as well;
+the feet of ribbon required for the perfect bow is equal to the cubic feet of volume of the present.
+Don't ask how they tie the bow, though; they'll never tell.
+
+For example:
+
+A present with dimensions 2x3x4 requires 2+2+3+3 = 10 feet of ribbon to wrap the present plus 2*3*4 = 24 feet of ribbon for the bow, for a total of 34 feet.
+A present with dimensions 1x1x10 requires 1+1+1+1 = 4 feet of ribbon to wrap the present plus 1*1*10 = 10 feet of ribbon for the bow, for a total of 14 feet.
+How many total feet of ribbon should they order?
+
+** Input
+[[~/aoc/2015/2/sample.txt]]
+
+[[~/aoc/2015/2/input.txt]]
+
+
+#+name: input_file
+#+begin_src python
+
+# sample = "../sample.txt"
+sample = "../input.txt"
+
+#+end_src
+
+#+RESULTS: input_file
+: None
+
+
+** Read Prism from Input (to prism [h, w, l] )
+- read input from input file
+  the format is 'n x n x n'
+
+  #+begin_src
+
+  axaxa
+  bxbxb
+  cxcxc
+  ...
+
+  #+end_src
+
+#+name: prisms
+#+begin_src python :results output :noweb yes
+<<input_file>>
+
+f = open(sample)
+prism_strs = f.read().splitlines()
+prisms = []
+for prism_str in prism_strs:
+    prism = prism_str.split('x')
+    prism = [int(edge) for edge in prism]
+    prism.sort()
+    prisms.append(prism)
+
+# print(prisms)
+
+#+end_src
+
+#+RESULTS: prisms
+: [[2, 3, 4], [1, 1, 10]]
+
+** Get Smallest Perimeter from prism
+- prism is sorted.
+  Get sum of first and second edge from prism.
+  And multiply by two.
+
+
+#+name: perimeters
+#+begin_src python :results output :noweb yes
+<<prisms>>
+
+def get_smallest_perimeter(prism):
+    return 2 * (prism[0] + prism[1])
+
+perimeters = [get_smallest_perimeter(prism) for prism in prisms]
+# print(perimeters)
+
+
+#+end_src
+
+#+RESULTS: perimeters
+: [10, 4]
+
+
+** Get required ribborn for bow
+- multiply all edges in prism
+
+#+name: bows
+#+begin_src python :results output :noweb yes
+<<prisms>>
+
+def get_bow(prism):
+    bow = 1
+    for edge in prism:
+        bow = bow * edge
+    return bow
+
+bows = [get_bow(prism) for prism in prisms]
+
+# print(bows)
+
+#+end_src
+
+#+RESULTS: bows
+: [[2, 3, 4], [1, 1, 10], [3, 4, 9]]
+: [24, 10, 108]
+
+** Result
+- sum of perimeters and bows
+
+#+result: result
+#+begin_src python :results output :noweb yes
+<<perimeters>>
+<<bows>>
+
+print(sum(bows) + sum(perimeters))
+
+#+end_src
+
+#+RESULTS:
+: 3842356

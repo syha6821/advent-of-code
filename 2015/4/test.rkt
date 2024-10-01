@@ -1,0 +1,1 @@
+(test gooddefine "good")

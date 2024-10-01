@@ -1,0 +1,148 @@
+* Imports
+#+name:imports
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (use '[clojure.string :only (split includes? trim)])
+  (use '[clojure.math :only (sqrt pow)])
+  (use '[clojure.set :only (union)])
+#+end_src
+
+#+RESULTS: imports
+
+
+* utils
+#+name:utils
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (defn inclusive-range [start end] (range start (inc end)))
+  (defn cart [f l1 l2]
+    (for [x l1 y l2] (f x y)))
+  (defn position [row col] {:row row :col col})
+  (defn positions [width height]
+    (cart position (inclusive-range 1 width) (inclusive-range 1 height)))
+  (defn square [x] (pow x 2))
+#+end_src
+
+#+RESULTS: utils
+| #'user/inclusive-range |
+| #'user/cart            |
+| #'user/position        |
+| #'user/positions       |
+| #'user/square          |
+
+
+* Input
+#+name:inputs
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (def input (split (slurp "./input.txt") #"\n"))
+  (def sample (split (slurp "./sample.txt") #"\n"))
+#+end_src
+
+#+RESULTS: inputs
+| #'user/input  |
+| #'user/sample |
+
+
+* 1
+** read-input
+#+name:read-input
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (defn image-size [image]
+    {:width (count (first image))
+     :height (count image)})
+
+  (defn read-input [input]
+    (let [size (image-size input)]
+      (zipmap (positions (:width size) (:height size))
+              (apply str input))))
+#+end_src
+
+#+RESULTS: read-input
+| #'user/default-gravity |
+| #'user/image-size      |
+| #'user/make-space      |
+| #'user/read-input      |
+
+** solve
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  <<utils>>
+  <<inputs>>
+  <<read-input>>
+
+  (defn pairing [elements]
+    (loop [[element & rests] elements
+           result []]
+      (if (nil? element)
+        result
+        (recur rests
+               (concat result (map #(list element %) rests))))))
+
+  (defn pos [space] (key space))
+  (defn kind [space] (val space))
+  (defn row-of [space] (:row (pos space)))
+  (defn col-of [space] (:col (pos space)))
+  (defn galaxy? [space] (= (kind space) \#))
+  (defn empty-space? [space] (= (kind space) \.))
+
+  (defn empty-line? [line] (every? empty-space? line))
+  (defn empty-rows [spaces] (map key (filter (fn [line] (empty-line? (val line))) (group-by row-of spaces))))
+  (defn empty-cols [spaces] (map key (filter (fn [line] (empty-line? (val line))) (group-by col-of spaces))))
+
+  (defn nums-between [a b nums]
+    (let [low (min a b)
+          high (max a b)]
+      (filter #(and (<= low %) (<= % high)) nums)))
+
+  (defn row-distance [galaxy1 galaxy2]
+    (abs (- (row-of galaxy1) (row-of galaxy2))))
+
+  (defn col-distance [galaxy1 galaxy2]
+    (abs (- (col-of galaxy1) (col-of galaxy2))))
+
+  (defn distance-with-gravity [galaxy1 galaxy2 gravity empty-row-nums empty-col-nums]
+    (let [empty-rows-between (count (nums-between (row-of galaxy1) (row-of galaxy2) empty-row-nums))
+          empty-cols-between (count (nums-between (col-of galaxy1) (col-of galaxy2) empty-col-nums))]
+      (+ (+ (- (row-distance galaxy1 galaxy2) empty-rows-between)
+            (* gravity empty-rows-between))
+         (+ (- (col-distance galaxy1 galaxy2) empty-cols-between)
+            (* gravity empty-cols-between)))))
+
+  (defn solve [input gravity]
+    (let [spaces (read-input input) 
+          pairs (pairing (filter galaxy? spaces))
+          empty-row-nums (empty-rows spaces)
+          empty-col-nums (empty-cols spaces)]
+      (apply + (map (fn [[galaxy1 galaxy2]] (distance-with-gravity galaxy1 galaxy2 gravity empty-row-nums empty-col-nums)) pairs))))
+#+end_src
+
+#+RESULTS:
+| #'user/inclusive-range |
+| #'user/cart            |
+| #'user/position        |
+| #'user/positions       |
+| #'user/input           |
+| #'user/sample          |
+| #'user/image-size      |
+| #'user/read-input      |
+| #'user/pairing         |
+| #'user/pos             |
+| #'user/kind            |
+| #'user/row-of          |
+| #'user/col-of          |
+| #'user/galaxy?         |
+| #'user/empty-space?    |
+| #'user/empty-line?     |
+| #'user/empty-rows      |
+| #'user/empty-cols      |
+| #'user/solve           |
+
+
+
+* Tests
+#+begin_src clojure :noweb yes :noweb-ref yes
+  "good"
+  (map + '(1 2 3))
+#+end_src
+
+#+RESULTS:
+| "good"  |
+| (1 2 3) |

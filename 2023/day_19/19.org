@@ -1,0 +1,103 @@
+* Imports
+#+name:imports
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (use '[clojure.string :only (split includes? trim replace ends-with? starts-with? replace-first join)])
+  (use '[clojure.string :only (split includes? trim replace ends-with? starts-with? replace-first join)])
+  (use '[clojure.math :only (sqrt pow)])
+  (use '[clojure.set :only (union rename-keys rename difference)])
+  (use '[clojure.spec.alpha :only (int-in-range?)])
+#+end_src
+
+#+RESULTS: imports
+
+
+* Input
+#+name:inputs
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (def input (split (slurp "./input.txt") #"\n"))
+  (def sample (split (slurp "./sample.txt") #"\n"))
+#+end_src
+
+#+RESULTS: inputs
+| class clojure.lang.Compiler$CompilerException |
+| class clojure.lang.Compiler$CompilerException |
+
+* Solve
+** read-input
+#+name:read-input
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (def sample-workflow "px{a<2006:qkq,m>2090:A,rfg}")
+  (def sample-rule "a<2006:qkq")
+
+  (defn workflow-name [workflow]
+    (apply str (take-while #(not= \{ %) workflow)))
+
+  (defn workflow-rules [workflow]
+    (split (apply str (butlast (rest (drop-while #(not= \{ %) workflow)))) #","))
+
+  (defn read-rule [rule]
+    (if (includes? rule ":")
+     {:test (fn [part] ((if (= \< (second rule)) < >) (part (first rule)) (read-string (apply str (take-while #(not= \: %) (drop 2 rule))))))
+      :destination (apply str (rest (drop-while #(not= \: %) rule)))}
+     {:test (fn [_] true) :destination rule}))
+
+  (defn read-workflows [input]
+    (let [strings (first (partition-by empty? input))]
+      (reduce (fn [result str] (assoc result (workflow-name str) (map #(read-rule %) (workflow-rules str)))) {} strings)))
+
+  (defn read-parts [input]
+    (let [strings (nth (partition-by empty? input) 2)
+          parts (map #(split (apply str (butlast (rest %))) #",") strings)]
+      (map (fn [part] (reduce (fn [result p] (assoc result (first p) (read-string (apply str (drop 2 p))))) {} part)) parts)))
+#+end_src
+
+#+RESULTS: read-input
+| #'user/sample-workflow |
+| #'user/sample-rule     |
+| #'user/workflow-name   |
+| #'user/workflow-rules  |
+| #'user/read-rule       |
+| #'user/read-workflows  |
+| #'user/read-parts      |
+
+** solve-1
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  <<inputs>>
+  <<read-input>>
+
+  (defn process-workflow [part workflow]
+    (if ((:test (first workflow)) part)
+      (:destination (first workflow))
+      (process-workflow part (rest workflow))))
+
+  (defn process-part [part workflows]
+    (loop [current-workflow "in"]
+      (if (or (= current-workflow "A")
+              (= current-workflow "R"))
+        current-workflow
+        (recur (process-workflow part (workflows current-workflow))))))
+
+  (defn solve [input]
+    (let [workflows (read-workflows input)
+          parts (read-parts input)]
+      (apply + (map #(apply + (map val %)) (filter #(= "A" (process-part % workflows)) parts)))))
+#+end_src
+
+#+RESULTS:
+| #'user/input            |
+| #'user/sample           |
+| #'user/sample-workflow  |
+| #'user/sample-rule      |
+| #'user/workflow-name    |
+| #'user/workflow-rules   |
+| #'user/read-rule        |
+| #'user/read-workflows   |
+| #'user/read-parts       |
+| #'user/process-workflow |
+| #'user/process-part     |
+| #'user/solve            |
+
+* Test
+#+begin_src clojure :noweb yes :noweb-ref yes
+#+end_src

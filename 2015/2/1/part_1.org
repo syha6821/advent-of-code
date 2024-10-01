@@ -1,0 +1,145 @@
+[[file:~/aoc/2015/aoc_2015.org::*Day 2: I Was Told There Would Be No Math][Day 2: I Was Told There Would Be No Math]]
+
+* Part 1
+** Description
+The elves are running low on wrapping paper, and so they need to submit an order for more.
+They have a list of the dimensions ~(length l, width w, and height h)~ of each present, and only want to order exactly as much as they need.
+
+Fortunately, every present is a box ([[./images/rectangular_prism.png][a perfect right rectangular prism]]),
+which makes calculating the required wrapping paper for each gift a little easier:
+find the surface area of the box, which is 2*l*w + 2*w*h + 2*h*l.
+The elves also need a little extra paper for each present: the area of the smallest side.
+
+For example:
+
+A present with dimensions 2x3x4 requires 2*6 + 2*12 + 2*8 = 52 square feet of wrapping paper plus 6 square feet of slack, for a total of 58 square feet.
+A present with dimensions 1x1x10 requires 2*1 + 2*10 + 2*10 = 42 square feet of wrapping paper plus 1 square foot of slack, for a total of 43 square feet.
+All numbers in the elves' list are in feet. How many total square feet of wrapping paper should they order?
+
+
+** Input
+[[~/aoc/2015/2/sample.txt]]
+
+[[~/aoc/2015/2/input.txt]]
+
+
+#+name: input_file
+#+begin_src python
+
+# sample = "../sample.txt"
+sample = "../input.txt"
+
+#+end_src
+
+#+RESULTS: input_file
+
+
+** Read Prism from Input (to prism [h, w, l] )
+- read input from input file
+  the format is 'n x n x n'
+
+  #+begin_src
+
+  axaxa
+  bxbxb
+  cxcxc
+  ...
+
+  #+end_src
+
+#+name: prisms
+#+begin_src python :results output :noweb yes
+<<input_file>>
+
+f = open(sample)
+prism_strs = f.read().splitlines()
+prisms = []
+for prism_str in prism_strs:
+    prism = prism_str.split('x')
+    prism.sort()
+    prism = [int(edge) for edge in prism]
+    prisms.append(prism)
+
+# print(prisms)
+
+#+end_src
+
+#+RESULTS: prisms
+: [[2, 3, 4], [1, 1, 10], [3, 4, 9]]
+
+
+** Sides ([h, w, l] to [h*w, h*l, w*l])
+- Get Sides from Prism
+  Prism = [h, w, l] ( ~order not matters~ )
+  Side = [h*w, h*l, w*l] ( ~order matters~ (use sort) )
+
+#+name: sides
+#+begin_src python :results output :noweb yes
+<<prisms>>
+def to_sides(prism):
+    h = prism[0]
+    w = prism[1]
+    l = prism[2]
+    sides = [h*w, h*l, w*l]
+    sides.sort()
+    return sides
+
+sides = [to_sides(prism) for prism in prisms]
+
+# print(sides)
+
+#+end_src
+
+#+RESULTS: sides
+: [[6, 8, 12], [1, 10, 10], [12, 27, 36]]
+
+
+** Area
+- Get Area from Sides
+  Area = 2 * sum(sides)
+
+#+name: areas
+#+begin_src python :results output :noweb yes
+<<sides>>
+def to_area(prism):
+    return sum([side * 2 for side in to_sides(prism)])
+
+areas = [to_area(prism) for prism in prisms]
+# print(areas)
+
+#+end_src
+
+#+RESULTS: areas
+: [52, 42, 150]
+
+
+** Present
+- Get required areas for present using area
+  present = lowest area + areas
+
+#+name: presents
+#+begin_src python :results output :noweb yes
+<<areas>>
+def required_paper_area(prism):
+    sides = to_sides(prism)
+    return sum([side * 2 for side in sides]) + sides[0]
+
+presents = [required_paper_area(prism) for prism in prisms]
+
+# print(presents)
+
+#+end_src
+
+#+RESULTS:
+: [58, 43, 162]
+
+
+** Result
+#+begin_src python :results output :noweb yes
+<<presents>>
+print(sum(presents))
+
+#+end_src
+
+#+RESULTS:
+: 1606483

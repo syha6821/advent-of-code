@@ -1,0 +1,405 @@
+* Imports
+#+name:imports
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (use '[clojure.string :only (split includes? trim)])
+  (use '[clojure.math :only (sqrt pow)])
+  (use '[clojure.set :only (union)])
+#+end_src
+
+#+RESULTS: imports
+
+* Input
+#+name:inputs
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  (def input (split (slurp "./input.txt") #"\n"))
+  (def sample1 (split (slurp "./sample1.txt") #"\n"))
+  (def sample2 (split (slurp "./sample2.txt") #"\n"))
+  (def sample3 (split (slurp "./sample3.txt") #"\n"))
+  (def sample3-2 (split (slurp "./sample3-2.txt") #"\n"))
+  (def sample3-3 (split (slurp "./sample3-3.txt") #"\n"))
+  (def sample3-4 (split (slurp "./sample3-4.txt") #"\n"))
+  (def sample3-5 (split (slurp "./sample3-5.txt") #"\n"))
+  (def sample3-6 (split (slurp "./sample3-6.txt") #"\n"))
+  (def sample4 (split (slurp "./sample4.txt") #"\n"))
+  (def sample4-2 (split (slurp "./sample4-2.txt") #"\n"))
+  (def sample5 (split (slurp "./sample5.txt") #"\n"))
+#+end_src
+
+#+RESULTS: inputs
+| #'user/input     |
+| #'user/sample1   |
+| #'user/sample2   |
+| #'user/sample3   |
+| #'user/sample3-2 |
+| #'user/sample3-3 |
+| #'user/sample3-4 |
+| #'user/sample3-5 |
+| #'user/sample3-6 |
+| #'user/sample4   |
+| #'user/sample4-2 |
+| #'user/sample5   |
+
+* 2
+** read-input
+#+name:read-input
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (defn map-size [input] {:row (double (count input)) :col (double (count (first input)))})
+  (defn make-positions [row col] (mapcat (fn [r] (map (fn [c] {:row (double r) :col (double c)}) (range 1.0 (inc col)))) (range 1.0 (inc row))))
+  (defn position [row col] {:row (double row) :col (double col)})
+  (defn int-position [row col] {:row (int row) :col (int col)})
+  (defn read-input [input]
+    (let [size (map-size input)
+          positions (make-positions (size :row) (size :col))
+          pipes (flatten (map seq input))]
+      (reduce (fn [m info] (assoc m (apply key info) (apply val info))) {} (map (fn [pos pipe] {pos {:kind pipe :is-loop false :air \@ :out-of-loop false}}) positions pipes))))
+  (defn is-int? [x] (== (mod x 1.0) 0))
+#+end_src
+
+#+RESULTS: read-input
+| #'user/map-size       |
+| #'user/make-positions |
+| #'user/position       |
+| #'user/int-position   |
+| #'user/read-input     |
+
+
+** find-loop
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<inputs>>
+  <<read-input>>
+  (defn position-of [pipe] (key pipe))
+  (defn kind-of [pipe] ((val pipe) :kind))
+  (defn pairing [l] (concat (map list (butlast l) (rest l)) (list (list (last l) (first l)))))
+
+  (defn connected-to [direction]
+    ({'down #{\| \L \J}
+      'up #{\| \7 \F}
+      'left #{\- \L \F}
+      'right #{\- \J \7}} direction))
+
+  (defn relative-position [pos target-pos]
+    (let [sub-pos (position (- (target-pos :row) (pos :row)) (- (target-pos :col) (pos :col)))]
+      (cond (= sub-pos (position -1 0)) 'up
+            (= sub-pos (position 0 1)) 'right
+            (= sub-pos (position 1 0)) 'down
+            (= sub-pos (position 0 -1)) 'left)))
+
+  (defn can-connected? [pipe target-pipe]
+    (let [connected-direction (apply relative-position (map position-of [pipe target-pipe]))]
+      (if (= (kind-of pipe) \S)
+        (contains? (connected-to connected-direction) (kind-of target-pipe))
+        (and (contains? (connected-to connected-direction) (kind-of target-pipe))
+             (contains? ({\| '#{down up}
+                          \- '#{left right} 
+                          \L '#{up right}
+                          \J '#{up left}
+                          \7 '#{down left}
+                          \F '#{down right}} (kind-of pipe))
+                        (apply relative-position (map position-of [pipe target-pipe])))))))
+
+  (defn can-connected? [pipe target-pipe]
+    (let [kind-1 (kind-of pipe)
+          kind-2 (kind-of target-pipe)
+          r-pos (apply relative-position (map position-of [pipe target-pipe]))]
+      (cond (= (kind-of pipe) \S) (contains? (connected-to r-pos) kind-2)
+            (and (= kind-1 \|) (= r-pos 'up)) (contains? #{\F \7 \|} kind-2)
+            (and (= kind-1 \|) (= r-pos 'down)) (contains? #{\J \L \|} kind-2)
+            (and (= kind-1 \-) (= r-pos 'left)) (contains? #{\F \L \-} kind-2)
+            (and (= kind-1 \-) (= r-pos 'right)) (contains? #{\J \7 \-} kind-2)
+            (and (= kind-1 \F) (= r-pos 'down)) (contains? #{\L \J \|} kind-2)
+            (and (= kind-1 \F) (= r-pos 'right)) (contains? #{\J \7 \-} kind-2)
+            (and (= kind-1 \7) (= r-pos 'down)) (contains? #{\L \J \|} kind-2)
+            (and (= kind-1 \7) (= r-pos 'left)) (contains? #{\F \L \-} kind-2)
+            (and (= kind-1 \J) (= r-pos 'up)) (contains? #{\7 \F \|} kind-2)
+            (and (= kind-1 \J) (= r-pos 'left)) (contains? #{\F \L \-} kind-2)
+            (and (= kind-1 \L) (= r-pos 'up)) (contains? #{\7 \F \|} kind-2)
+            (and (= kind-1 \L) (= r-pos 'right)) (contains? #{\J \7 \-} kind-2)
+            :else false)))
+
+  (defn make-pipe [pos info] {pos info})
+
+  (defn up-pos [pos] (position (dec (pos :row)) (pos :col)))
+  (defn down-pos [pos] (position (inc (pos :row)) (pos :col)))
+  (defn left-pos [pos] (position (pos :row) (dec (pos :col))))
+  (defn right-pos [pos] (position (pos :row) (inc (pos :col))))
+
+  (defn up-left-pos [pos] (position (dec (pos :row)) (dec (pos :col))))
+  (defn up-right-pos [pos] (position (dec (pos :row)) (inc (pos :col))))
+  (defn down-left-pos [pos] (position (inc (pos :row)) (dec (pos :col))))
+  (defn down-right-pos [pos] (position (inc (pos :row)) (inc (pos :col))))
+
+  (defn start-position [pipes] (position-of (some #(and (= (kind-of %) \S) %) pipes)))
+
+  (defn pipe? [pipe] (contains? #{\| \- \L \J \7 \F \S} (kind-of pipe)))
+  (defn pipe-at [pos pipe-map] (find pipe-map pos))
+  (defn adjacent-positions [pos] (list (up-pos pos) (right-pos pos) (down-pos pos) (left-pos pos)))
+  (defn adjacent-pipes [pipe pipe-map] (filter #(and (not (nil? %)) (pipe? %)) (map (fn [pos] (pipe-at pos pipe-map)) (adjacent-positions (position-of pipe)))))
+
+  (defn adjacent-items [pipe pipe-map] (filter #(not (nil? %)) (map (fn [pos] (pipe-at pos pipe-map)) (adjacent-positions (position-of pipe)))))
+
+  (defn diagonal-adjacent-positions [pos] (list (up-left-pos pos) (up-right-pos pos) (down-left-pos pos) (down-right-pos pos)))
+  (defn diagonal-adjacent-items [pipe pipe-map] (filter #(not (nil? %)) (map (fn [pos] (pipe-at pos pipe-map)) (diagonal-adjacent-positions (position-of pipe)))))
+
+  (defn all-adjacent-items [pipe pipe-map] (let [pos (position-of pipe)]
+                                             (filter #(not (nil? %))
+                                                     (map #(pipe-at % pipe-map) (list (up-pos pos) (up-right-pos pos) (right-pos pos)
+                                                                                      (down-right-pos pos) (down-pos pos) (down-left-pos pos)
+                                                                                      (left-pos pos) (up-left-pos pos))))))
+  (defn all-adjacent-pipes [pipe pipe-map] (filter pipe? (all-adjacent-items pipe pipe-map)))
+
+  (defn squeezed-adjacents [item pipe-map] (filter #(not (nil? %))
+                                                   (map #(pipe-at % pipe-map)
+                                                        (let [pos (position-of item)
+                                                              row (pos :row)
+                                                              col (pos :col)]
+                                                          (cond (is-int? row) (list (position (dec row) (- col 0.5))
+                                                                                     (position (dec row) (+ col 0.5))
+                                                                                     (position row (+ col 0.5))
+                                                                                     (position (inc row) (+ col 0.5))
+                                                                                     (position (inc row) (- col 0.5))
+                                                                                     (position row (- col 0.5)))
+                                                                (is-int? col) (list (position (- row 0.5) (dec col))
+                                                                                     (position (- row 0.5) col)
+                                                                                     (position (- row 0.5) (inc col))
+                                                                                     (position (+ row 0.5) (inc col))
+                                                                                     (position (+ row 0.5) col)
+                                                                                     (position (+ row 0.5) (dec col))))))))
+
+  (defn distance [pos1 pos2] (sqrt (+ (pow (- (pos1 :row) (pos2 :row)) 2) (pow (- (pos1 :col) (pos2 :col)) 2))))
+  (defn adjacent? [pos1 pos2] (== 1 (distance pos1 pos2)))
+  (defn adjacent-items? [item1 item2] (adjacent? (position-of item1) (position-of item2)))
+  (defn connected? [pipe target-pipe] (and (adjacent? (position-of pipe) (position-of target-pipe))
+                                           (can-connected? pipe target-pipe)))
+  (defn connected-pipes? [item1 item2] (and (and (pipe? item1) (pipe? item2))
+                                            (adjacent-items? item1 item2)
+                                            (can-connected? item1 item2)))
+
+  (defn not-connected-pipes? [item1 item2] (and (and (pipe? item1) (pipe? item2))
+                                                (adjacent-items? item1 item2)
+                                                (not (can-connected? item1 item2))))
+  (defn connected-pipes [pipe pipe-map]
+    (filter #(connected? pipe %) (adjacent-pipes pipe pipe-map)))
+
+  (defn next-pipe [prev-pipe current-pipe pipe-map]
+    (filter #(not (= prev-pipe %)) (connected-pipes current-pipe pipe-map)))
+
+  (defn guess-s [pipe-map]
+    {:kind (let [start-pos (start-position pipe-map)
+                 adjacents (into (sorted-set) (map (fn [pipe] (relative-position start-pos (position-of pipe))) (connected-pipes (pipe-at start-pos pipe-map) pipe-map)))]
+             (cond (= adjacents (sorted-set 'up 'down)) \|
+                   (= adjacents (sorted-set 'left 'right)) \-
+                   (= adjacents (sorted-set 'up 'right)) \L
+                   (= adjacents (sorted-set 'up 'left)) \J
+                   (= adjacents (sorted-set 'down 'left)) \7
+                   (= adjacents (sorted-set 'down 'right)) \F))
+     :air \@ :is-loop true :out-of-loop false})
+
+  (defn mark-loop [input]
+    (let [start-pos (start-position input)
+          pipe-map (assoc input start-pos (guess-s input))]
+      (loop [current (pipe-at start-pos pipe-map)
+             prev current
+             next (first (next-pipe prev current pipe-map))
+             marked-map pipe-map]
+        (if (= (position-of next) start-pos)
+          (assoc marked-map (position-of current) (assoc (val current) :is-loop true))
+          (recur next
+                 current
+                 (first (next-pipe current next pipe-map))
+                 (assoc marked-map (position-of current) (assoc (val current) :is-loop true)))))))
+
+  (defn is-loop? [pipe] ((val pipe) :is-loop))
+
+  (defn add-border [input]
+    (let [original-size (map-size input)
+          original-map (mark-loop (read-input input))
+          empty-tile-val {:kind \. :is-loop false :air \@ :out-of-loop false}
+          top-line-positions (map #(position 0 %) (range 0 (+ 2 (original-size :col))))
+          bottom-line-positions (map #(position (inc (original-size :row)) %) (range 0 (+ 2 (original-size :col))))
+          side-line-positions (mapcat #(list (position % 0) (position % (inc (original-size :col)))) (range 1 (inc (original-size :row))))
+          border-positions (concat top-line-positions bottom-line-positions side-line-positions)]
+      (union original-map
+             (reduce (fn [m pos] (assoc m pos empty-tile-val)) {} border-positions))))
+
+  (def extended-sample3 (add-border sample3))
+
+  (defn air-of [pipe] ((val pipe) :air))
+  (defn air? [pipe] (= ((val pipe) :air) \@))
+  (defn out? [pipe] (= ((val pipe) :air) \O))
+  (defn part-of-loop? [pipe] ((val pipe) :is-loop))
+  (defn in? [pipe] (and (not (out? pipe)) (not (part-of-loop? pipe))))
+
+  (defn squeezed? [pipe] (= ((val pipe) :kind) \*))
+  (defn make-squeezed-between [item1 item2] (let [pos1 (position-of item1)
+                                                  pos2 (position-of item2)
+                                                  r-pos (relative-position pos1 pos2)]
+                                              (cond (contains? '#{left right} r-pos) {(position (pos1 :row) (* 1.0 (/ (+ (pos1 :col) (pos2 :col)) 2)))
+                                                                                      {:kind \* :is-loop false :air \@ :out-of-loop false}}
+                                                    (contains? '#{up down} r-pos) {(position (* 1.0 (/ (+ (pos1 :row) (pos2 :row)) 2)) (pos1 :col))
+                                                                                   {:kind \* :is-loop false :air \@ :out-of-loop false}})))
+
+  (defn tile? [pipe] (= ((val pipe) :kind) \.))
+  (defn pipe? [pipe] (contains? #{\| \- \L \J \7 \F} ((val pipe) :kind)))
+
+  (defn pipe? [pipe] (contains? #{\| \- \L \J \7 \F \S} (kind-of pipe)))
+
+  (defn all-adjacent-items-with-nil [pipe pipe-map] (let [pos (position-of pipe)]
+                                                      (map #(pipe-at % pipe-map) (list (up-pos pos) (up-right-pos pos) (right-pos pos)
+                                                                                       (down-right-pos pos) (down-pos pos) (down-left-pos pos)
+                                                                                       (left-pos pos) (up-left-pos pos)))))
+
+  (defn squeezed-adjacents-with-nil [item pipe-map] (map #(pipe-at % pipe-map)
+                                                         (let [pos (position-of item)
+                                                               row (pos :row)
+                                                               col (pos :col)]
+                                                           (cond (is-int? row) (list (position (dec row) (- col 0.5))
+                                                                                      (position (dec row) (+ col 0.5))
+                                                                                      (position row (+ col 0.5))
+                                                                                      (position (inc row) (+ col 0.5))
+                                                                                      (position (inc row) (- col 0.5))
+                                                                                      (position row (- col 0.5)))
+                                                                 (is-int? col) (list (position (- row 0.5) (dec col))
+                                                                                      (position (- row 0.5) col)
+                                                                                      (position (- row 0.5) (inc col))
+                                                                                      (position (+ row 0.5) (inc col))
+                                                                                      (position (+ row 0.5) col)
+                                                                                      (position (+ row 0.5) (dec col)))))))
+
+  (defn connected-pipes-with-nil? [item1 item2] (and (and (not (nil? item1)) (not (nil? item2)))
+                                                     (and (pipe? item1) (pipe? item2))
+                                                     (adjacent-items? item1 item2)
+                                                     (can-connected? item1 item2)))
+
+  (defn not-connected-pipes-with-nil? [item1 item2] (and (and (not (nil? item1)) (not (nil? item2)))
+                                                         (and (pipe? item1) (pipe? item2))
+                                                         (adjacent-items? item1 item2)
+                                                         (not (can-connected? item1 item2))))
+
+  (defn find-spreadables [spread-point pipe-map]
+    (filter air?
+            (cond (squeezed? spread-point)  (let [all-adjacents (squeezed-adjacents-with-nil spread-point pipe-map)]
+                                              (concat (filter #(not (find pipe-map (position-of %)))
+                                                              (map (fn [[item1 item2]] (first (make-squeezed-between item1 item2)))
+                                                                   (filter (fn [[item1 item2]] (not-connected-pipes-with-nil? item1 item2)) (pairing all-adjacents))))
+                                                      (filter #(and (not (nil? %)) (not (part-of-loop? %))) all-adjacents)))
+                  (not (part-of-loop? spread-point)) (let [all-adjacents (all-adjacent-items-with-nil spread-point pipe-map)]
+                                         (concat (filter #(not (find pipe-map (position-of %)))                                                              
+                                                         (map (fn [[item1 item2]] (first (make-squeezed-between item1 item2)))
+                                                              (filter (fn [[item1 item2]] (not-connected-pipes-with-nil? item1 item2)) (pairing all-adjacents)))) 
+                                                 (filter #(and (not (nil? %)) (not (part-of-loop? %))) all-adjacents))))))
+  (defn sieve [input]
+    (loop [pipe-map input
+           spreads [(find pipe-map (position 0 0))]]
+      (if (empty? spreads)
+        (filter #(not ((val %) :out-of-loop)) pipe-map)
+        (let [new-map (reduce (fn [m s] (assoc m (position-of s) (assoc (val s) :out-of-loop true)))
+                              pipe-map spreads)]
+          (recur new-map
+                 (distinct (mapcat (fn [s] (filter #(and (not ((val s) :out-of-loop)) (not (part-of-loop? %)))
+                                                   (adjacent-items s new-map)))
+                                   spreads))) ))))
+
+  (defn solve [input]
+    (loop [pipe-map (assoc (add-border input) (position 0 0) {:kind \. :is-loop false :air \O :out-of-loop false})
+           spread-points (find-spreadables (find pipe-map (position 0 0)) pipe-map)]
+      (if (empty? spread-points)
+        ;; (filter in? (sieve pipe-map))
+        ;; (filter squeezed? pipe-map)
+        ;; (filter #(not (squeezed? %)) pipe-map)
+        (filter in? pipe-map)
+        (let [new-map (reduce (fn [m s] (assoc m (position-of s) (assoc (val s) :air \O)))
+                              pipe-map spread-points)]
+          (recur new-map
+                 (distinct (mapcat (fn [s] (find-spreadables s new-map)) spread-points)))))))
+#+end_src
+
+#+RESULTS:
+| #'user/input                       |
+| #'user/sample1                     |
+| #'user/sample2                     |
+| #'user/sample3                     |
+| #'user/sample3-2                   |
+| #'user/sample3-3                   |
+| #'user/sample3-4                   |
+| #'user/sample3-5                   |
+| #'user/sample3-6                   |
+| #'user/sample4                     |
+| #'user/sample4-2                   |
+| #'user/sample5                     |
+| #'user/map-size                    |
+| #'user/make-positions              |
+| #'user/position                    |
+| #'user/int-position                |
+| #'user/read-input                  |
+| #'user/position-of                 |
+| #'user/kind-of                     |
+| #'user/pairing                     |
+| #'user/connected-to                |
+| #'user/relative-position           |
+| #'user/can-connected?              |
+| #'user/can-connected?              |
+| #'user/make-pipe                   |
+| #'user/up-pos                      |
+| #'user/down-pos                    |
+| #'user/left-pos                    |
+| #'user/right-pos                   |
+| #'user/up-left-pos                 |
+| #'user/up-right-pos                |
+| #'user/down-left-pos               |
+| #'user/down-right-pos              |
+| #'user/start-position              |
+| #'user/pipe?                       |
+| #'user/pipe-at                     |
+| #'user/adjacent-positions          |
+| #'user/adjacent-pipes              |
+| #'user/adjacent-items              |
+| #'user/diagonal-adjacent-positions |
+| #'user/diagonal-adjacent-items     |
+| #'user/all-adjacent-items          |
+| #'user/all-adjacent-pipes          |
+| #'user/squeezed-adjacents          |
+| #'user/distance                    |
+| #'user/adjacent?                   |
+| #'user/adjacent-items?             |
+| #'user/connected?                  |
+| #'user/connected-pipes?            |
+| #'user/not-connected-pipes?        |
+| #'user/connected-pipes             |
+| #'user/next-pipe                   |
+| #'user/guess-s                     |
+| #'user/mark-loop                   |
+| #'user/is-loop?                    |
+| #'user/add-border                  |
+| #'user/extended-sample3            |
+| #'user/air-of                      |
+| #'user/air?                        |
+| #'user/out?                        |
+| #'user/part-of-loop?               |
+| #'user/in?                         |
+| #'user/squeezed?                   |
+| #'user/make-squeezed-between       |
+| #'user/tile?                       |
+| #'user/pipe?                       |
+| #'user/find-spreadables            |
+| #'user/sieve                       |
+| #'user/solve                       |
+
+
+* Tests
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (defn pairing1 [l] (map list (butlast l) (rest l)))
+  (defn pairing2 [l] (concat (map list (butlast l) (rest l)) (list (list (last l) (first l)))))
+  (defn pairing2 [l] (concat (map list (butlast l) (rest l)) (list (list (last l) (first l)))))
+  (pairing1 [1 2 3 4 5])
+  (pairing2 [1 2 3 4 5])
+#+end_src
+
+#+RESULTS:
+| #'user/pairing1                 |
+| #'user/pairing2                 |
+| ((1 2) (2 3) (3 4) (4 5))       |
+| ((1 2) (2 3) (3 4) (4 5) (5 1)) |
+
+{:row 1, :col 1} {:row 3, :col 10} {:row 10, :col 3} {:row 0, :col 8} {:row 0, :col 3} {:row 8, :col 1} {:row 5, :col 1} {:row 2, :col 10} {:row 10, :col 5} {:row 4, :col 10} {:row 0, :col 2} {:row 10, :col 1} {:row 0, :col 9} {:row 1, :col 5} {:row 3, :col 0} {:row 2, :col 11} {:row 10, :col 4} {:row 1, :col 8} {:row 10, :col 0} {:row 0, :col 10} {:row 6, :col 0} {:row 9, :col 3} {:row 1, :col 11} {:row 0, :col 1} {:row 0, :col 6} {:row 0, :col 0} {:row 2, :col 1} {:row 4, :col 0} {:row 5, :col 0} {:row 9, :col 2} {:row 0, :col 4} {:row 0, :col 5} {:row 9, :col 5} {:row 4, :col 11} {:row 1, :col 6} {:row 1, :col 0} {:row 6, :col 1} {:row 7, :col 0} {:row 9, :col 0} {:row 9, :col 4} {:row 0, :col 11} {:row 2, :col 0} {:row 1, :col 9} {:row 1, :col 4} {:row 8, :col 0} {:row 1, :col 7} {:row 1, :col 2} {:row 7, :col 1} {:row 3, :col 1} {:row 3, :col 11} {:row 9, :col 1} {:row 10, :col 2} {:row 0, :col 7} {:row 4, :col 1} {:row 1, :col 3} {:row 1, :col 10}
+  

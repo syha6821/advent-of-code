@@ -1,0 +1,86 @@
+* Imports
+#+name:imports
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (use '[clojure.string :only (split includes? trim replace ends-with? starts-with? replace-first join)])
+  (use '[clojure.math :only (sqrt pow)])
+  (use '[clojure.set :only (union)])
+#+end_src
+
+#+RESULTS: imports
+
+* Input
+#+name:inputs
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (def input (split (slurp "./input.txt") #"\n"))
+  (def sample (split (slurp "./sample.txt") #"\n"))
+#+end_src
+
+#+RESULTS: inputs
+| #'user/input  |
+| #'user/sample |
+
+* Solve
+** read-input
+#+name:read-input
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (defn read-patterns [patterns]
+    {:rows patterns
+     :cols (reduce (fn [m p] (map str m p)) (first patterns) (rest patterns))})
+
+  (defn read-input [input]
+    (map read-patterns (filter #(not= '("") %) (partition-by empty? input))))
+#+end_src
+
+** solve
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  <<inputs>>
+  <<read-input>>
+
+  (defn pairing [l] (map list (butlast l) (rest l)))
+  (defn differences [str1 str2]
+   (count (filter false? (map = str1 str2))))
+
+
+  (defn mirror-suspected-point [l] (map second (filter #(<= (apply differences (first %)) 1) (map list (pairing l) (range 1 (count l))))))
+
+  (defn is-mirror? [point nums]
+    (let [[l r] (split-at point nums)
+          left (reverse l)
+          right r
+          len (min (count left) (count right))]
+      (= (apply + (map differences (take len left) (take len right))) 1)))
+
+  (defn find-mirror [patterns]
+    (let [result (first (filter #(is-mirror? % patterns) (mirror-suspected-point patterns)))]
+      (if result result 0)))
+
+  (defn solve [input]
+    (let [result (map (fn [m] {:row (find-mirror (:rows m)) :col (find-mirror (:cols m))}) (read-input input))]
+      (reduce (fn [result-num r] (+ (* 100 (:row r)) (:col r) result-num)) 0 result)))
+#+end_src
+
+#+RESULTS:
+| #'user/input                  |
+| #'user/sample                 |
+| #'user/read-patterns          |
+| #'user/read-input             |
+| #'user/pairing                |
+| #'user/differences            |
+| #'user/mirror-suspected-point |
+| #'user/is-mirror?             |
+| #'user/find-mirror            |
+| #'user/solve                  |
+
+* Test
+#+begin_src clojure :noweb yes :noweb-ref yes
+#+end_src
+
+(89 24 103 66 37 37 66 103 24)
+(24 103 66 37 37 66 103 24 89)
+
+(89 24 103 66 37 37 66 103 24)
+(24 103 66 37 37 66 103 24)
+
+(358 90 385 385 90 102 346)
+(346 102 90 385 385 90 358)

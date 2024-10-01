@@ -1,0 +1,226 @@
+* Imports
+#+name:imports
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (use '[clojure.string :only (split includes? trim replace ends-with? starts-with? replace-first join)])
+  (use '[clojure.string :only (split includes? trim replace ends-with? starts-with? replace-first join)])
+  (use '[clojure.math :only (sqrt pow)])
+  (use '[clojure.set :only (union rename-keys rename difference)])
+  (use '[clojure.spec.alpha :only (int-in-range?)])
+#+end_src
+
+#+RESULTS: imports
+
+
+* Input
+#+name:inputs
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (def input (split (slurp "./input.txt") #"\n"))
+  (def sample (split (slurp "./sample.txt") #"\n"))
+#+end_src
+
+#+RESULTS: inputs
+| class clojure.lang.Compiler$CompilerException |
+| class clojure.lang.Compiler$CompilerException |
+
+* Solve
+** read-input
+#+name:read-input
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (def directions '(\U \R \D \L))
+  (def unit-positions (zipmap directions (map #(apply position %) '((-1 0) (0 1) (1 0) (0 -1)))))
+  (defn pos-at [direction pos] (merge-with + pos (unit-positions direction)))
+  (defn inclusive-range [start end] (range start (inc end)))
+  (defn position [row col] {:row row :col col})
+  (defn positions 
+    ([width height] (cart position (inclusive-range 1 width) (inclusive-range 1 height)))
+    ([size] (cart position (inclusive-range 1 (:height size)) (inclusive-range 1 (:width size)))))
+  (defn inclusive-range [start end] (range start (inc end)))
+  (defn cart [f l1 l2]
+    (for [x l1 y l2] (f x y)))
+  (defn remove-bracket [str]
+    (subs str 1 (dec (count str))))
+  (defn valid-pos? [pos size]
+    (and (int-in-range? 1 (+ (:width size) 1) (:col pos))
+         (int-in-range? 1 (+ (:height size) 1) (:row pos))))
+
+  (defn valid-pos-with-border? [pos sizes]
+    (and (int-in-range? (:min-row sizes) (inc (:max-row sizes)) (:row pos))
+         (int-in-range? (:min-col sizes) (inc (:max-col sizes)) (:col pos))))
+
+  (defn adjacent-positions [pos size] (filter #(valid-pos? % size) (map #(pos-at % pos) directions)))
+  (defn adjacent-positions [pos size] (filter #(valid-pos-with-border? % size) (map #(pos-at % pos) directions)))
+
+  (defn make-plan [input]
+    (map #(zipmap [:direction :count :color :outside]
+                  (-> (split % #" ")
+                       (update 0 first)
+                       (update 1 read-string)
+                       (update 2 remove-bracket))) input))
+#+end_src
+
+#+RESULTS: read-input
+| #'user/directions             |
+| #'user/unit-positions         |
+| #'user/pos-at                 |
+| #'user/inclusive-range        |
+| #'user/position               |
+| #'user/positions              |
+| #'user/inclusive-range        |
+| #'user/cart                   |
+| #'user/remove-bracket         |
+| #'user/valid-pos?             |
+| #'user/valid-pos-with-border? |
+| #'user/adjacent-positions     |
+| #'user/adjacent-positions     |
+| #'user/make-plan              |
+
+** solve-1
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  <<inputs>>
+  <<read-input>>
+
+  (defn dig-by-instruction [pos ins]
+    (loop [pos pos
+           ins ins
+           result []]
+      (if (zero? (:count ins))
+        result
+        (let [digged (pos-at (:direction ins) pos)]
+          (recur digged
+                 (update-in ins [:count] dec)
+                 (merge result digged))))))
+
+  (defn dig [plan]
+    (loop [current-pos (position 1 1)
+           [current-ins & rest-ins] plan
+           result []]
+      (if (nil? current-ins)
+        result
+        (let [digged (dig-by-instruction current-pos current-ins)]
+          (recur (last digged)
+                 rest-ins
+                 (apply merge result digged))))))
+
+  (defn positions [sizes]
+    (cart position (inclusive-range (:min-row sizes) (:max-row sizes)) (inclusive-range (:min-col sizes) (:max-col sizes))))
+
+  (defn get-size [positions]
+    {:min-row (:row (apply min-key :row positions))
+     :min-col (:col (apply min-key :col positions))
+     :max-row (:row (apply max-key :row positions))
+     :max-col (:col (apply max-key :col positions))})
+
+  (defn empty-map-with-border [size]
+    (let [top-line (map #(position (dec (:min-row size)) %) (inclusive-range (dec (:min-col size)) (inc (:max-col size))))
+          bottom-line (map #(position (inc (:max-row size)) %) (inclusive-range (dec (:min-col size)) (inc (:max-col size))))
+          sides (mapcat #(list (position % (dec (:min-col size))) (position % (inc (:max-col size))))
+                        (inclusive-range (:min-row size) (:max-row size)))]
+      (reduce (fn [m pos] (assoc m pos {:digged false :outside false})) {} (concat top-line bottom-line sides (positions size)))))
+
+  (defn dig-border [plan]
+    (let [digs (dig plan)
+          empty-lagoon (empty-map-with-border (get-size digs))
+          lagoon (reduce (fn [lagoon dig] (assoc-in lagoon [dig :digged] true)) empty-lagoon digs)]
+      lagoon))
+
+  (defn spreadables [spread lagoon size]
+    (into #{} (filter #(let [item (lagoon %)] (and (not (:outside item)) (not (:digged item)))) (adjacent-positions spread size))))
+
+  (defn dig-inside [lagoon]
+    (let [size (get-size (map key lagoon))]
+      (loop [lagoon lagoon
+             spreads #{(position (:min-row size) (:min-col size))}]
+        (if (empty? spreads)
+          lagoon
+          (let [next-lagoon (reduce (fn [l p] (assoc-in l [p :outside] true)) lagoon spreads)]
+            (recur next-lagoon
+                   (reduce (fn [next-spreads spread] (union next-spreads (spreadables spread next-lagoon size))) #{} spreads)))))))
+
+  (defn solve-1 [input]
+    (count (filter #(or (:digged (val %)) (not (:outside (val %)))) (dig-inside (dig-border (make-plan input))))))
+
+  (defn draw-lagoon [lagoon]
+    (let [lagoon (map (fn [line] (map second (sort-by (fn [item] (:col (first item))) line))) (map val (sort-by key (group-by #(:row (key %)) lagoon))))]
+      (doseq [line lagoon]
+        (doseq [item line]
+          (if (or (:digged item) (not (:outside item)))
+            (print \#)
+            (print \.)))
+        (println))))
+
+  (defn raw-lagoon [lagoon]
+    (let [lagoon (map (fn [line] (map second (sort-by (fn [item] (:col (first item))) line))) (map val (sort-by key (group-by #(:row (key %)) lagoon))))]
+      (doseq [line lagoon]
+        (doseq [item line]
+          (if (:digged item)
+            (print \#)
+            (print \.)))
+        (println))))
+
+  (draw-lagoon (dig-inside (dig-border (make-plan sample))))
+#+end_src
+
+#+RESULTS:
+| #'user/input                  |
+| #'user/sample                 |
+| #'user/directions             |
+| #'user/unit-positions         |
+| #'user/pos-at                 |
+| #'user/inclusive-range        |
+| #'user/position               |
+| #'user/positions              |
+| #'user/inclusive-range        |
+| #'user/cart                   |
+| #'user/remove-bracket         |
+| #'user/valid-pos?             |
+| #'user/valid-pos-with-border? |
+| #'user/adjacent-positions     |
+| #'user/adjacent-positions     |
+| #'user/make-plan              |
+| #'user/dig-by-instruction     |
+| #'user/dig                    |
+| #'user/positions              |
+| #'user/get-size               |
+| #'user/empty-map-with-border  |
+| #'user/dig-border             |
+| #'user/spreadables            |
+| #'user/dig-inside             |
+| #'user/solve-1                |
+| #'user/draw-lagoon            |
+| #'user/draw-lagoon            |
+
+
+* Test
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (defn take-inside [line]
+    (map #(first %) (apply concat (take-nth 2 (-> (take-nth 2 (partition-by #(:digged (second %)) line)) rest butlast)))))
+
+  (defn take-inside-str [line]
+    (take-nth 2 (-> (take-nth 2 (partition-by #(= % \#) line)) rest butlast)))
+
+  (defn dig-inside [lagoon]
+    (loop [[line & rests] (map (fn [[_ line]] (sort-by #(:col (key %)) line)) (group-by #(:row (key %)) lagoon))
+           insides []]
+      (if (nil? line)
+        (reduce (fn [l p] (assoc-in l [p :digged] true)) lagoon insides)
+        (recur rests
+               (apply merge insides (take-inside line))))))
+#+end_src
+
+
+(get-size (map key (dig-border (make-plan sample))))
+{:width 8, :height 11}
+user> 
+(count (dig-border (make-plan sample)))
+108
+user> 
+(count (dig-border (make-plan input)))
+29205
+user> (get-size (dig (make-plan sample)))
+{:width 7, :height 10}
+user> 
+(get-size (dig (make-plan input)))
+{:width 205, :height 130}
+user> (count (empty-map-with-border (get-size (dig (make-plan input)))))
+27324

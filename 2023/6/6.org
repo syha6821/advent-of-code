@@ -1,0 +1,153 @@
+* Imports
+#+name:imports
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (use '[clojure.string :only (split includes? trim)])
+#+end_src
+
+* Input
+#+name:inputs
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  (def input (split (slurp "./input.txt") #"\n"))
+  (def sample (split (slurp "./sample.txt") #"\n"))
+#+end_src
+
+#+RESULTS: inputs
+| #'user/input                                      |
+| #'user/sample                                     |
+| ["Time:      7  15   30" "Distance:  9  40  200"] |
+
+* 1
+** read-input
+#+name:read-input
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<inputs>>
+  (defn after-colon [str] (second (split str #":")))
+  (defn read-input-line [line] (map read-string (filter #(not (empty? %)) (split (after-colon line) #" "))))
+  (defn read-input [input] (map #(hash-map :time %1 :distance %2) (read-input-line (first input)) (read-input-line (second input))))
+  (read-input sample)
+#+end_src
+
+#+RESULTS: read-input
+| #'user/input                                                               |
+| #'user/sample                                                              |
+| ["Time:      7  15   30" "Distance:  9  40  200"]                          |
+| #'user/after-colon                                                         |
+| #'user/read-input-line                                                     |
+| #'user/read-input                                                          |
+| ({:time 7, :distance 7} {:time 15, :distance 15} {:time 30, :distance 30}) |
+
+** find-winning-seconds
+#+name:find-winning-seconds
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (defn movable-distance [pressed-time total-time] (* pressed-time (- total-time pressed-time)))
+  (defn find-winning-seconds [given-time win-distance]
+    (filter #(> (movable-distance % given-time) win-distance) (range 1 (inc given-time))))
+#+end_src
+
+#+RESULTS:
+| #'user/movable-distance      |
+| #'user/find-winning-seconds  |
+| 4                            |
+| 8                            |
+| 9                            |
+| (2 3 4 5)                    |
+| (4 5 6 7 8 9 10 11)          |
+| (11 12 13 14 15 16 17 18 19) |
+
+** solve
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<read-input>>
+  <<find-winning-seconds>>
+
+  (defn solve [input]
+    (let [records (read-input input)]
+      (map #(count (find-winning-seconds (% :time) (% :distance))) records)))
+
+  (apply * (solve input))
+#+end_src
+
+#+RESULTS:
+| #'user/input                                                               |
+| #'user/sample                                                              |
+| ["Time:      7  15   30" "Distance:  9  40  200"]                          |
+| #'user/after-colon                                                         |
+| #'user/read-input-line                                                     |
+| #'user/read-input                                                          |
+| ({:time 7, :distance 9} {:time 15, :distance 40} {:time 30, :distance 200}) |
+| #'user/movable-distance                                                    |
+| #'user/find-winning-seconds                                                |
+| #'user/solve                                                               |
+| 625968                                                                     |
+
+
+* 2
+** read-input
+#+name:read-input2
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<inputs>>
+  (defn after-colon [str] (second (split str #":")))
+  (defn read-input-line [line] (read-string (apply str (filter #(not (empty? %)) (split (after-colon line) #" ")))))
+  (defn read-input [input] {:time (read-input-line (first input)) :distance (read-input-line (second input))})
+  (read-input sample)
+#+end_src
+
+#+RESULTS: read-input2
+| #'user/input                    |
+| #'user/sample                   |
+| #'user/after-colon              |
+| #'user/read-input-line          |
+| #'user/read-input               |
+| {:time 71530, :distance 940200} |
+
+** find-winning-seconds
+#+name:find-winning-seconds
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (defn movable-distance [pressed-time total-time] (* pressed-time (- total-time pressed-time)))
+  (defn find-winning-seconds [given-time win-distance]
+    (filter #(> (movable-distance % given-time) win-distance) (range 1 (inc given-time))))
+#+end_src
+
+#+RESULTS:
+| #'user/movable-distance      |
+| #'user/find-winning-seconds  |
+| 4                            |
+| 8                            |
+| 9                            |
+| (2 3 4 5)                    |
+| (4 5 6 7 8 9 10 11)          |
+| (11 12 13 14 15 16 17 18 19) |
+
+
+** solve
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<read-input2>>
+  <<find-winning-seconds>>
+
+  (defn solve [input]
+    (let [record (read-input input)]
+      (find-winning-seconds (record :time) (record :distance))))
+
+  (count (solve input))
+#+end_src
+
+#+RESULTS:
+| #'user/input                    |
+| #'user/sample                   |
+| #'user/after-colon              |
+| #'user/read-input-line          |
+| #'user/read-input               |
+| {:time 71530, :distance 940200} |
+| #'user/movable-distance         |
+| #'user/find-winning-seconds     |
+| #'user/solve                    |
+| 43663323                        |
+
+
+* Test
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (range 1 7)
+#+end_src
+
+#+RESULTS:
+| 1 | 2 | 3 | 4 | 5 | 6 |

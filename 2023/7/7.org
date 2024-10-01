@@ -1,0 +1,192 @@
+* Imports
+#+name:imports
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (use '[clojure.string :only (split includes? trim)])
+#+end_src
+
+* Input
+#+name:inputs
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  (def input (split (slurp "./input.txt") #"\n"))
+  (def sample (split (slurp "./sample.txt") #"\n"))
+#+end_src
+
+* 1
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (defn rank-val [rank]
+    ({'five-of-a-kind \7
+      'four-of-a-kind \6
+      'full-house \5
+      'three-of-a-kind \4
+      'two-pair \3
+      'one-pair \2
+      'high-card \1} rank))
+
+  (defn card-val [card]
+    ({\A 13 \K 12 \Q 11 \J 10 \T 9 \9 8 \8 7 \7 6 \6 5 \5 4 \4 3 \3 2 \2 1} card))
+
+  (defn compare-by-card [hand1 hand2]
+    (loop [[card1 & rest1] (seq (hand1 :cards))
+           [card2 & rest2] (seq (hand2 :cards))]
+      (cond (> (card-val card1) (card-val card2)) hand1
+            (< (card-val card1) (card-val card2)) hand2
+            :else (recur rest1 rest2))))
+
+  (defn higher [hand1 hand2]
+    (let [rank1 (rank hand1)
+          rank2 (rank hand2)]
+      (cond (= rank1 rank2) (compare-by-card hand1 hand2)
+            (> rank1 rank2) hand1
+            (< rank1 rank2) hand2)))
+
+  (defn tri->dec [tri]
+    (+ (* (Character/digit (first tri) 10)
+          (Math/pow 13 (dec (count tri))))
+       (loop [cards (rest tri)
+              sum 0]
+         (if (empty? cards)
+           sum
+           (recur (rest cards)
+                  (+ sum
+                     (* (card-val (first cards))
+                        (Math/pow 13 (dec (count cards))))))))))
+  (defn rank [cards]
+    (let [freq (sort (map second (frequencies cards)))]
+      (cond (= '(5) freq) 'five-of-a-kind
+            (= '(1 4) freq) 'four-of-a-kind
+            (= '(2 3) freq) 'full-house
+            (= '(1 1 3) freq) 'three-of-a-kind
+            (= '(1 2 2) freq) 'two-pair
+            (= '(1 1 1 2) freq) 'one-pair
+            (= '(1 1 1 1 1)) 'high-card)))
+
+  (defn read-input [input] (map (fn [line] (let [strs (split line #" ")] {:cards (first strs)
+                                                                         :bid (read-string (second strs))
+                                                                         :rank (rank (first strs))
+                                                                         :val (tri->dec (str (rank-val (rank (first strs))) (first strs)))})) input))
+  (read-input sample)
+  (defn solve [input]
+    (let [hands (read-input input)]
+      (apply + (map #(* (%1 :bid) %2) (sort-by :val hands) (range 1 (inc (count hands)))))))
+
+  (solve sample)
+#+end_src
+
+#+RESULTS:
+| #'user/rank-val                                                                                                                                          |
+| #'user/card-val                                                                                                                                          |
+| #'user/compare-by-card                                                                                                                                   |
+| #'user/higher                                                                                                                                            |
+| #'user/tri->dec                                                                                                                                          |
+| #'user/rank                                                                                                                                              |
+| #'user/read-input                                                                                                                                        |
+| ({:cards "32T3K", :bid 765, :rank one-pair, :val 803464.0} {:cards "T55J5", :bid 684, :rank three-of-a-kind, :val 1751819.0} {:cards "KK677", :bid 28, :rank two-pair, :val 1483904.0} {:cards "KTJJT", :bid 220, :rank two-pair, :val 1478213.0} {:cards "QQQJA", :bid 483, :rank three-of-a-kind, :val 1825512.0}) |
+| #'user/solve                                                                                                                                             |
+| 6440                                                                                                                                                     |
+
+
+* 2
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<inputs>>
+  (defn rank-val [rank]
+    ({'five-of-a-kind \7
+      'four-of-a-kind \6
+      'full-house \5
+      'three-of-a-kind \4
+      'two-pair \3
+      'one-pair \2
+      'high-card \1} rank))
+
+  (defn card-val [card]
+    ({\A 13 \K 12 \Q 11 \T 10 \9 9 \8 8 \7 7 \6 6 \5 5 \4 4 \3 3 \2 2 \J 1} card))
+
+  (defn tri->dec [tri]
+    (+ (* (Character/digit (first tri) 10)
+          (Math/pow 13 (dec (count tri))))
+       (loop [cards (rest tri)
+              sum 0]
+         (if (empty? cards)
+           sum
+           (recur (rest cards)
+                  (+ sum
+                     (* (card-val (first cards))
+                        (Math/pow 13 (dec (count cards))))))))))
+
+  (defn joker? [card] (= card \J))
+
+  (defn use-joker [cards]
+    (let [most-freq-card (first (first (sort-by second > (frequencies (filter #(not (joker? %)) cards)))))]
+      (if (nil? most-freq-card) "AAAAA" (reduce (fn [changed card] (if (joker? card) (str changed most-freq-card) (str changed card))) "" cards))))
+
+  (defn rank [cards]
+    (let [freq (sort (map second (frequencies (use-joker cards))))]
+      (cond (= '(5) freq) 'five-of-a-kind
+            (= '(1 4) freq) 'four-of-a-kind
+            (= '(2 3) freq) 'full-house
+            (= '(1 1 3) freq) 'three-of-a-kind
+            (= '(1 2 2) freq) 'two-pair
+            (= '(1 1 1 2) freq) 'one-pair
+            (= '(1 1 1 1 1)) 'high-card)))
+
+  (defn read-input [input] (map (fn [line] (let [strs (split line #" ")] {:cards (first strs)
+                                                                         :bid (read-string (second strs))
+                                                                         :rank (rank (first strs))
+                                                                         :val (tri->dec (str (rank-val (rank (first strs))) (first strs)))})) input))
+  (defn solve [input]
+    (let [hands (read-input input)]
+      (apply + (map #(* (%1 :bid) %2) (sort-by :val hands) (range 1 (inc (count hands)))))))
+
+  (solve sample)
+  (solve input)
+#+end_src
+
+#+RESULTS:
+| #'user/input      |
+| #'user/sample     |
+| #'user/rank-val   |
+| #'user/card-val   |
+| #'user/tri->dec   |
+| #'user/joker?     |
+| #'user/use-joker  |
+| #'user/rank       |
+| #'user/read-input |
+| #'user/solve      |
+| 5905              |
+| 249781879         |
+
+249875865 too high
+250042409 too high
+
+* Tests
+#+begin_src clojure :noweb yes :noweb-ref yes
+  :good
+  (sort-by :val [{:val 3} {:val 1} {:val 5}])
+  (Character/digit \1 10)
+  (count "good")
+  (first "good")
+  (Math/pow 13 2)
+  (+ (Math/pow 13 2))
+  (defn a->b [a] (* a a))
+  (a->b 3)
+#+end_src
+
+#+RESULTS:
+|                        :good |
+| ({:val 1} {:val 3} {:val 5}) |
+|                            1 |
+|                            4 |
+|                           \g |
+|                        169.0 |
+|                        169.0 |
+|                  #'user/a->b |
+|                            9 |
+
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (defn joker? [card] (= card \J))
+  (empty? (filter #(not (joker? %)) "JJJJJ"))
+#+end_src
+
+#+RESULTS:
+| #'user/joker? |
+| true          |

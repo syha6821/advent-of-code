@@ -1,0 +1,158 @@
+* Imports
+#+name:imports
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (use '[clojure.string :only (split includes? trim)])
+  (use '[clojure.math :only (sqrt pow)])
+  (use '[clojure.set :only (union)])
+#+end_src
+
+#+RESULTS: imports
+
+
+* Input
+#+name:utils
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (defn inclusive-range [start end] (range start (inc end)))
+  (defn cart [f l1 l2]
+    (for [x l1 y l2] (f x y)))
+  (defn position [row col] {:row row :col col})
+  (defn positions [width height]
+    (cart position (inclusive-range 1 width) (inclusive-range 1 height)))
+#+end_src
+
+#+RESULTS: utils
+| #'user/inclusive-range |
+| #'user/cart            |
+| #'user/position        |
+| #'user/positions       |
+
+
+* Input
+#+name:inputs
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (def input (split (slurp "./input.txt") #"\n"))
+  (def sample (split (slurp "./sample.txt") #"\n"))
+#+end_src
+
+#+RESULTS: inputs
+| #'user/input  |
+| #'user/sample |
+
+
+* 1
+** read-input
+#+name:read-input
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (defn image-size [image]
+    {:width (count (first image))
+     :height (count image)})
+
+  (defn make-space [kind position]
+    {:kind kind
+     :position position})
+
+  (defn read-input [input]
+    (let [size (image-size input)]
+      (map make-space (apply str input) (positions (:width size) (:height size)))))
+#+end_src
+
+#+RESULTS: read-input
+| #'user/image-size |
+| #'user/make-space |
+| #'user/read-input |
+
+** solve
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  <<inputs>>
+  <<read-input>>
+
+  (defn pairing [elements]
+    (loop [[element & rests] elements
+           result []]
+      (if (nil? element)
+        result
+        (recur rests
+               (concat result (map #(list element %) rests))))))
+  (defn distance [space1 space2]
+    (+ (abs (- (row space1) (row space2)))
+       (abs (- (col space1) (col space2)))))
+  (defn galaxy? [space] (= (:kind space) \#))
+  (defn empty-space? [space] (= (:kind space) \.))
+  (defn row [space] (:row (:position space)))
+  (defn col [space] (:col (:position space)))
+  (defn empty-line-at-row [row-num width] (map #(make-space \. (position row-num %)) (inclusive-range 1 width)))
+  (defn empty-line-at-col [col-num height] (map #(make-space \. (position % col-num)) (inclusive-range 1 height)))
+  (defn empty-line? [line] (every? empty-space? line))
+  (defn empty-rows [spaces] (filter (fn [line] (empty-line? (val line))) (group-by row spaces)))
+  (defn empty-cols [spaces] (filter (fn [line] (empty-line? (val line))) (group-by col spaces)))
+  (defn pushed-right-col-by-n [c n] (map (fn [space] (assoc space :position (position (row space) (+ (col space) n)))) c))
+  (defn pushed-down-row-by-n [r n] (map (fn [space] (assoc space :position (position (+ (row space) n) (col space)))) r))
+
+  (defn apply-gravity-on-cols-by-n [spaces n]
+    (loop [[first-col & rest-cols] (map val (sort-by key (group-by col spaces)))
+           result []]
+      (cond (nil? first-col) result
+            (empty-line? first-col) (recur (map #(pushed-right-col-by-n % n) rest-cols)
+                                           (apply concat result first-col (map #(pushed-right-col-by-n first-col %) (inclusive-range 1 n))))
+            :else (recur rest-cols
+                         (concat result first-col)))))
+
+  (defn apply-gravity-on-rows-by-n [spaces n]
+    (loop [[first-row & rest-rows] (map val (sort-by key (group-by row spaces)))
+           result []]
+      (cond (nil? first-row) result
+            (empty-line? first-row) (recur (map #(pushed-down-row-by-n % n) rest-rows)
+                                           (apply concat result first-row (map #(pushed-down-row-by-n first-row %) (inclusive-range 1 n))))
+            :else (recur rest-rows
+                         (concat result first-row)))))
+
+  (defn apply-gravity-on-spaces-by-n [spaces n]
+    (apply-gravity-on-rows-by-n (apply-gravity-on-cols-by-n spaces n) n))
+
+  (defn solve [input n]
+    (let [image (read-input input)
+          pairs (pairing (filter galaxy? (apply-gravity-on-spaces-by-n image (- n 1))))]
+      (apply + (map #(apply distance %) pairs))))
+#+end_src
+
+#+RESULTS:
+| #'user/input                        |
+| #'user/sample                       |
+| #'user/image-size                   |
+| #'user/make-space                   |
+| #'user/read-input                   |
+| #'user/pairing                      |
+| #'user/distance                     |
+| #'user/galaxy?                      |
+| #'user/empty-space?                 |
+| #'user/row                          |
+| #'user/col                          |
+| #'user/empty-line-at-row            |
+| #'user/empty-line-at-col            |
+| #'user/empty-line?                  |
+| #'user/empty-rows                   |
+| #'user/empty-cols                   |
+| #'user/pushed-right-col-by-n        |
+| #'user/pushed-down-row-by-n         |
+| #'user/apply-gravity-on-cols-by-n   |
+| #'user/apply-gravity-on-rows-by-n   |
+| #'user/apply-gravity-on-spaces-by-n |
+| #'user/solve                        |
+
+
+
+* Tests
+#+begin_src clojure :noweb yes :noweb-ref yes
+  inclusive-range
+  (defn aa [l] (map (fn [num] (map (fn [e] (+ e num)) l)) (range 1 3)))
+  (concat [1 2 3] [4 5 6] (aa [9 10 11]))
+  (apply concat [1 2 3] [4 5 6] (aa [9 10 11]))
+#+end_src
+
+#+RESULTS:
+| #function[user/inclusive-range]     |
+| #'user/aa                           |
+| (1 2 3 4 5 6 (10 11 12) (11 12 13)) |
+| (1 2 3 4 5 6 10 11 12 11 12 13)     |
+

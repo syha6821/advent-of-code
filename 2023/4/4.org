@@ -1,0 +1,108 @@
+* Imports
+#+name:imports
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (use '[clojure.string :only (split includes? trim)])
+#+end_src
+
+* Input
+#+name:inputs
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (def input (split (slurp "./input.txt") #"\n"))
+  (def sample (split (slurp "./sample.txt") #"\n"))
+#+end_src
+
+* Codes
+** 1
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  <<inputs>>
+
+  (def sample-line "Card 1: 41 48 83 86 17 | 83 86  6 31 17  9 48 53")
+  (defn make-card [line] (let [card (map (fn [numstrs] (mapv (fn [num] (read-string num)) (filter #(not (empty? %)) numstrs))) (map #(split % #" ") (map #(trim %) (split (second (split line #":")) #"\|"))))]
+                           {:winning-nums (set (first card)) :my-nums (set (second card))}))
+  (defn winner-nums [card] (filter #(contains? (card :winning-nums) %) (card :my-nums)))
+  (def sample-card (make-card sample-line))
+  sample-card
+  (winner-nums sample-card)
+  ;; (defn solve [input] (map #(winner-nums %) (map #(make-card %) input)))
+  (defn solve [input] (reduce + (filter #(<= 1 %) (map #(Math/pow 2 (dec (count %))) (map #(winner-nums %) (map #(make-card %) input))))))
+  (solve input)
+#+end_src
+
+
+
+#+begin_src clojure :noweb yes :noweb-ref yes
+#+end_src
+
+#+RESULTS:
+
+
+** 2
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  <<inputs>>
+
+  (def sample-line "Card 1: 41 48 83 86 17 | 83 86  6 31 17  9 48 53")
+  (defn make-card [line] (let [card (map (fn [numstrs] (mapv (fn [num] (read-string num)) (filter #(not (empty? %)) numstrs))) (map #(split % #" ") (map #(trim %) (split (second (split line #":")) #"\|"))))]
+                           {:winning-nums (set (first card)) :my-nums (set (second card))}))
+  (defn winner-nums [card] (filter #(contains? (card :winning-nums) %) (card :my-nums)))
+  (def sample-card (make-card sample-line))
+  sample-card
+  (winner-nums sample-card)
+  (defn win-count [input] (reduce (fn [m id-wincount] (assoc m (id-wincount :id) (id-wincount :wincount)))
+                                  (sorted-map)
+                                  (map (fn [id wincount] {:id id :wincount wincount})
+                                       (range 1 (inc (count input)))
+                                       (map #(count (winner-nums %)) (map #(make-card %) input)))))
+  (win-count sample)
+
+  (defn reward-cards [before win-result card-count]
+    (if (zero? (second win-result))
+      before
+      (reward-cards (assoc before (inc (first win-result)) (+ (get before (inc (first win-result))) card-count))
+                    [(inc (first win-result)) (dec (second win-result))]
+                    card-count)))
+
+  (defn solve [input]
+    (loop [result (reduce (fn [m id] (assoc m id 1)) (sorted-map) (range 1 (inc (count input))))
+           rests (win-count input)]
+      (if (empty? rests)
+        result
+        (recur (reward-cards result (first rests) (get result (first (first rests)))) (rest rests)))))
+
+  (defn solve [input]
+    (reduce + (map #(second %) (loop [result (reduce (fn [m id] (assoc m id 1)) (sorted-map) (range 1 (inc (count input))))
+                                      rests (win-count input)]
+                                 (if (empty? rests)
+                                   result
+                                   (recur (reward-cards result (first rests) (get result (first (first rests)))) (rest rests)))))))
+
+  (solve input)
+#+end_src
+
+#+RESULTS:
+| #'user/input                                                         |
+| #'user/sample                                                        |
+| #'user/sample-line                                                   |
+| #'user/make-card                                                     |
+| #'user/winner-nums                                                   |
+| #'user/sample-card                                                   |
+| {:winning-nums #{86 48 41 17 83}, :my-nums #{86 48 31 6 17 9 83 53}} |
+| (86 48 17 83)                                                        |
+| #'user/win-count                                                     |
+| {1 4, 2 2, 3 2, 4 1, 5 0, 6 0}                                       |
+| #'user/reward-cards                                                  |
+| #'user/solve                                                         |
+| #'user/solve                                                         |
+| 13080971                                                             |
+
+no 13049
+
+
+
+#+begin_src clojure :noweb yes :noweb-ref yes
+#+end_src
+
+#+RESULTS:
+| 9 | 3 |
+

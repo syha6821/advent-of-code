@@ -1,0 +1,81 @@
+* Imports
+#+name:imports
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (use '[clojure.string :only (split includes? trim replace ends-with? starts-with? replace-first join)])
+  (use '[clojure.math :only (sqrt pow)])
+  (use '[clojure.set :only (union)])
+#+end_src
+
+#+RESULTS: imports
+
+* Input
+#+name:inputs
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (def input (split (slurp "./input.txt") #"\n"))
+  (def sample (split (slurp "./sample.txt") #"\n"))
+#+end_src
+
+#+RESULTS: inputs
+| #'user/input  |
+| #'user/sample |
+
+* Solve
+** read-input
+#+name:read-input
+#+begin_src clojure :noweb yes :noweb-ref yes
+  (defn read-input [input]
+    (let [input (reverse (concat (list (repeat (count (first input)) "#")) input))]
+      (reduce (fn [result s] (map str result s)) (first input) (rest input))))
+#+end_src
+
+#+RESULTS: read-input
+: #'user/read-input
+
+** solve
+#+begin_src clojure :noweb yes :noweb-ref yes
+  <<imports>>
+  <<inputs>>
+  <<read-input>>
+
+  (defn empty-space? [item] (= item \.))
+  (defn round-rock? [item] (= item \O))
+  (defn cube-rock? [item] (= item \#))
+  (defn cube-rock-group? [group] (every? cube-rock? group))
+
+  (defn round-rock-weight [round-rock-count cube-rock-num]
+    (/ (* round-rock-count (+ (- cube-rock-num round-rock-count) (dec cube-rock-num))) 2))
+
+  "##..O.O.OO#"
+
+  (defn tilt-right [line]
+    (let [rock-groups (partition-by cube-rock? line)]
+      (loop [[group & rest-groups] rock-groups
+             current-pos 1
+             round-rocks 0
+             result 0]
+        (cond (nil? group) result
+              (cube-rock-group? group) (recur rest-groups
+                                              (+ current-pos (count group))
+                                              0
+                                              (+ result (round-rock-weight round-rocks current-pos)))
+              :else (recur rest-groups
+                           (+ current-pos (count group))
+                           (count (filter round-rock? group))
+                           result)))))
+#+end_src
+
+#+RESULTS:
+| #'user/input             |
+| #'user/sample            |
+| #'user/read-input        |
+| #'user/empty-space?      |
+| #'user/round-rock?       |
+| #'user/cube-rock?        |
+| #'user/cube-rock-group?  |
+| #'user/round-rock-weight |
+| "##..O.O.OO#"            |
+| #'user/tilt-right        |
+
+* Test
+#+begin_src clojure :noweb yes :noweb-ref yes
+#+end_src
